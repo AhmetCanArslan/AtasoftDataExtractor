@@ -1,5 +1,7 @@
 # DataExtractor Project
 
+**Note:** This project was developed in response to receiving an overwhelming number of applications through the AI Summit Erzurum application forms, and as a solution for QR code–based entry.
+
 ## About the Project
 DataExtractor processes data from an Excel file and generates QR codes. This project performs the following operations:
 - Reading data from an Excel file
