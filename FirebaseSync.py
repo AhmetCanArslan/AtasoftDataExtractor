@@ -6,7 +6,7 @@ import os
 
 # --- Configuration ---
 # IMPORTANT: Replace with the actual path to your Firebase service account key file
-SERVICE_ACCOUNT_KEY_PATH = 'google-services.json' # Removed leading slash
+SERVICE_ACCOUNT_KEY_PATH = 'qr-deneme.json'
 COLLECTION_NAME = 'users'
 CSV_UUID_COL = 'UUID'
 CSV_COUNTER_COL = 'Counter'
