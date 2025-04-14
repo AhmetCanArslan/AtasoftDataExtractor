@@ -6,6 +6,8 @@ import re
 import openpyxl
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as OpenpyxlImage
+import subprocess # Added for running the sync script
+import sys # Added for getting python executable path
 
 # --- Configuration ---
 EXCEL_FILE_PATH = 'yanitlar.xlsx'
@@ -15,6 +17,7 @@ COUNTER_COLUMN_NAME = 'Counter'
 NAMESPACE = uuid.NAMESPACE_DNS
 CSV_OUTPUT_DIR = os.path.join('output', 'csv')
 QR_OUTPUT_DIR = os.path.join('output', 'qr')
+FIREBASE_SYNC_SCRIPT = 'FirebaseSync.py' # Added script name
 
 # --- Utility Functions ---
 
@@ -211,4 +214,41 @@ if __name__ == "__main__":
         generate_excel_with_qr(csv_file, QR_OUTPUT_DIR, excel_output_path)
         print("Excel with QR codes generation completed.")
         print("CSV generation completed.")
-        print("All processes have been completed.")
+
+        # --- Firebase Synchronization ---
+        print("\n--- Starting Firebase Synchronization ---")
+        try:
+            # Ensure the sync script exists
+            if not os.path.exists(FIREBASE_SYNC_SCRIPT):
+                 print(f"Error: Firebase sync script '{FIREBASE_SYNC_SCRIPT}' not found.")
+            else:
+                # Get the path to the current Python interpreter
+                python_executable = sys.executable
+                # Run the Firebase sync script, passing the CSV path as an argument
+                result = subprocess.run(
+                    [python_executable, FIREBASE_SYNC_SCRIPT, csv_file],
+                    capture_output=True, # Capture stdout/stderr
+                    text=True, # Decode output as text
+                    check=True # Raise an exception if the script fails
+                )
+                print("Firebase sync script output:")
+                print(result.stdout)
+                if result.stderr:
+                    print("Firebase sync script errors:")
+                    print(result.stderr)
+                print("--- Firebase Synchronization Finished ---")
+        except FileNotFoundError:
+             print(f"Error: Python executable not found at '{sys.executable}'. Cannot run sync script.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error: Firebase sync script failed with exit code {e.returncode}.")
+            print("Output:")
+            print(e.stdout)
+            print("Errors:")
+            print(e.stderr)
+        except Exception as e:
+            print(f"An unexpected error occurred during Firebase sync: {e}")
+        # --- End Firebase Synchronization ---
+
+        print("\nAll processes have been completed.")
+    else:
+        print("CSV file generation failed. Skipping subsequent steps including Firebase sync.")
