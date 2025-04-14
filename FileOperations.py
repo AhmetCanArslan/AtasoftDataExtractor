@@ -2,6 +2,34 @@ import os
 import pandas as pd
 from openpyxl import Workbook
 
+def clean_phone_number(phone_str):
+    """
+    Telefon numarasını temizler:
+    1. String'e çevirir,
+    2. Boşlukları ve '+' işaretini kaldırır,
+    3. Başında '0' veya '90' varsa kaldırır,
+    4. 10 haneli değilse boş string döner.
+    """
+    if not isinstance(phone_str, str):
+        phone_str = str(phone_str)
+
+    # Boşlukları ve '+' işaretini kaldır
+    cleaned = phone_str.replace(" ", "").replace("+", "")
+
+    # Başında '90' varsa kaldır
+    if cleaned.startswith("90"):
+        cleaned = cleaned[2:]
+    # Başında '0' varsa kaldır
+    elif cleaned.startswith("0"):
+        cleaned = cleaned[1:]
+
+    # 10 haneli değilse uyarı ver ve boş string döndür
+    if len(cleaned) != 10:
+        print(f"Warning: Cleaned phone number '{cleaned}' (orijinal: '{phone_str}') is not exactly 10 digits long. Skipping.")
+        return ""
+
+    return cleaned
+
 def create_directory_if_not_exists(directory_path):
     """
     Create a directory if it does not already exist.

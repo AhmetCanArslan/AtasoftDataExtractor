@@ -8,6 +8,7 @@ from openpyxl import Workbook
 from openpyxl.drawing.image import Image as OpenpyxlImage
 import subprocess # Added for running the sync script
 import sys # Added for getting python executable path
+from FileOperations import create_directory_if_not_exists, clean_phone_number # Import clean_phone_number
 
 # --- Configuration ---
 EXCEL_FILE_PATH = 'yanitlar.xlsx'
@@ -20,34 +21,6 @@ QR_OUTPUT_DIR = os.path.join('output', 'qr')
 FIREBASE_SYNC_SCRIPT = 'FirebaseSync.py' # Added script name
 
 # --- Utility Functions ---
-
-def clean_phone_number(phone_str):
-    """
-    Telefon numarasını temizler:
-    1. String'e çevirir,
-    2. Boşlukları ve '+' işaretini kaldırır,
-    3. Başında '0' veya '90' varsa kaldırır,
-    4. 10 haneli değilse boş string döner.
-    """
-    if not isinstance(phone_str, str):
-        phone_str = str(phone_str)
-
-    # Boşlukları ve '+' işaretini kaldır
-    cleaned = phone_str.replace(" ", "").replace("+", "")
-
-    # Başında '90' varsa kaldır
-    if cleaned.startswith("90"):
-        cleaned = cleaned[2:]
-    # Başında '0' varsa kaldır
-    elif cleaned.startswith("0"):
-        cleaned = cleaned[1:]
-
-    # 10 haneli değilse uyarı ver ve boş string döndür
-    if len(cleaned) != 10:
-        print(f"Warning: Cleaned phone number '{cleaned}' (orijinal: '{phone_str}') is not exactly 10 digits long. Skipping.")
-        return ""
-
-    return cleaned
 
 def generate_uuid_from_phone(phone_number_str):
     if pd.isna(phone_number_str) or not str(phone_number_str).strip():
@@ -197,7 +170,7 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
     wb.save(excel_output_path)
 
 # --- File Operations ---
-from FileOperations import create_directory_if_not_exists
+# from FileOperations import create_directory_if_not_exists # This line is now handled above
 
 # --- Main Execution ---
 if __name__ == "__main__":
