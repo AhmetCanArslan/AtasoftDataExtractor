@@ -23,6 +23,12 @@ def generate_qr_codes_from_csv(csv_path, uuid_column, phone_column, output_dir):
             print("Skipping row with no valid UUID.")
             continue
 
+        # Use phone_column value for QR code filenames
+        phone_value = row.get(phone_column, '').strip()
+        if not phone_value:
+            print("Skipping row with no valid phone number.")
+            continue
+
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -33,6 +39,6 @@ def generate_qr_codes_from_csv(csv_path, uuid_column, phone_column, output_dir):
         qr.make(fit=True)
 
         img = qr.make_image(fill_color="black", back_color="white")
-        img_path = os.path.join(output_dir, f"{uuid_value}.png")
+        img_path = os.path.join(output_dir, f"{phone_value}.png")
         img.save(img_path)
-        print(f"Generated QR code for UUID: {uuid_value}")
+        print(f"Generated QR code for phone number: {phone_value}")
