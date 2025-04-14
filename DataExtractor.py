@@ -20,12 +20,44 @@ QR_OUTPUT_DIR = os.path.join('output', 'qr')
 def clean_phone_number(phone_str):
     if not isinstance(phone_str, str):
         phone_str = str(phone_str)
-    cleaned = re.sub(r'\D', '', phone_str)
+
+    # 1. Remove all whitespace
+    cleaned = re.sub(r'\s', '', phone_str)
+
+    # 2. Handle +90 prefix specifically before removing '+'
+    if cleaned.startswith('+90'):
+        cleaned = cleaned[3:]
+    
+    # 3. Remove all remaining non-digit characters
+    cleaned = re.sub(r'\D', '', cleaned)
+
+    # 4. Handle 90 or 0 prefixes on the digit string
     if cleaned.startswith('90'):
         cleaned = cleaned[2:]
     elif cleaned.startswith('0'):
         cleaned = cleaned[1:]
-    return cleaned
+
+    # 5. Convert to integer and back to string to remove potential leading zeros
+    #    and handle empty strings after cleaning
+    try:
+        # Handle case where cleaning results in an empty string
+        if not cleaned:
+             # This will be caught by the length check later, no need for specific warning here
+             return "" 
+        int_number = int(cleaned)
+        final_number_str = str(int_number) # int conversion removes leading zeros
+
+        # 6. Validate length: must be exactly 10 digits
+        if len(final_number_str) == 10:
+            return final_number_str
+        else:
+            print(f"Warning: Cleaned phone number '{final_number_str}' (from original '{phone_str}') is not 10 digits long. Skipping.")
+            return "" # Return empty string if not 10 digits
+
+    except ValueError:
+        # This case might occur if unexpected characters remain, though unlikely
+        print(f"Warning: Could not convert cleaned phone '{cleaned}' to int. Original: '{phone_str}'")
+        return "" # Return empty string or handle as appropriate
 
 def generate_uuid_from_phone(phone_number_str):
     if pd.isna(phone_number_str) or not str(phone_number_str).strip():
@@ -39,16 +71,35 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
             print(f"Error: File not found at '{file_path}'")
             return None
 
-        df = pd.read_excel(file_path, engine='openpyxl')
+        # Read Excel file with phone column as string to preserve formatting
+        df = pd.read_excel(file_path, engine='openpyxl', dtype={phone_col: str})
         print(f"Successfully read {len(df)} rows from '{file_path}'.")
         print(f"Columns found: {list(df.columns)}")
 
         if phone_col not in df.columns:
             print(f"Error: Column '{phone_col}' not found.")
             return None
+            
+        # Ensure the phone column is treated as a string to handle mixed data types
+        df[phone_col] = df[phone_col].astype(str)
 
-        df[uuid_col] = df[phone_col].apply(generate_uuid_from_phone)
-        print(f"Generated UUIDs based on '{phone_col}' column.")
+        # First, clean all phone numbers for consistency
+        print("Cleaning phone numbers...")
+        # Create a new column for cleaned phone numbers
+        df['cleaned_phone'] = df[phone_col].apply(clean_phone_number)
+        
+        # Generate UUIDs based on the cleaned phone numbers
+        df[uuid_col] = df['cleaned_phone'].apply(lambda x: generate_uuid_from_phone(x) if x else None)
+        print(f"Generated UUIDs based on cleaned phone numbers.")
+        
+        # Count and report empty or invalid phone numbers
+        invalid_phones = df[df['cleaned_phone'] == ""].shape[0]
+        if invalid_phones > 0:
+            print(f"WARNING: {invalid_phones} rows have invalid or empty phone numbers after cleaning.")
+        
+        # Drop the temporary cleaned phone column
+        df = df.drop(columns=['cleaned_phone'])
+        
         df[counter_col] = 0
         print(f"Added '{counter_col}' column with initial value 0.")
 
@@ -121,18 +172,27 @@ def generate_qr_codes_from_csv(csv_path, uuid_col, phone_col, output_dir):
         for index, row in df.iterrows():
             uuid_value = row.get(uuid_col)
             phone_value = row.get(phone_col)
+            
+            # Skip rows with empty UUIDs
             if pd.isna(uuid_value) or not str(uuid_value).strip():
                 print(f"Skipping row {index+2}: empty UUID.")
                 skipped_count += 1
                 continue
+                
             uuid_value = str(uuid_value).strip()
-            # Use cleaned phone number as filename if available; fallback to UUID
+            
+            # Clean phone number for filename
             safe_filename = clean_phone_number(str(phone_value)) if phone_value and str(phone_value).strip() else uuid_value
-
+            
+            # If phone number didn't clean properly, use UUID as filename
+            if not safe_filename:
+                print(f"Row {index+2}: Using UUID as filename due to invalid phone.")
+                safe_filename = uuid_value
+            
             qr = qrcode.QRCode(
                 version=1,
                 error_correction=qrcode.constants.ERROR_CORRECT_L,
-                box_size=3,  # updated from 2 to 3 for slightly larger QR code
+                box_size=5,  # increased from 3 to 5 for larger QR codes
                 border=4,
             )
             qr.add_data(uuid_value)
@@ -161,13 +221,13 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
     wb = Workbook()
     ws = wb.active
     ws.title = "QR Kodlar"
-    ws.column_dimensions['A'].width = 12  # set QR column width to fit QR images
+    ws.column_dimensions['A'].width = 20  # set QR column width to fit larger QR images
     # Write header row
     headers = ['qr kodlar', 'ad soyad', 'posta', 'numara']
     ws.append(headers)
     row_number = 2
     for _, row in df.iterrows():
-        ws.row_dimensions[row_number].height = 60  # adjust row height to fit QR images
+        ws.row_dimensions[row_number].height = 100  # adjust row height to fit larger QR images
         mobile = row.get('mobile', '')
         uuid_value = row.get(f"{UUID_COLUMN_NAME}", '')
         safe_filename = clean_phone_number(mobile) if mobile and str(mobile).strip() else str(uuid_value).strip()
@@ -179,6 +239,8 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
         # Insert QR image in column A if exists
         if os.path.exists(img_path):
             img = OpenpyxlImage(img_path)
+            img.width = 145  # set QR image width
+            img.height =145  # set QR image height
             ws.add_image(img, f"A{row_number}")
         else:
             ws.cell(row=row_number, column=1, value="No QR")
