@@ -147,58 +147,7 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         return None
 
 # --- QR Code Generation ---
-def generate_qr_codes_from_csv(csv_path, uuid_col, phone_col, output_dir):
-    try:
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-            print(f"Created QR output directory: '{output_dir}'")
-        df = pd.read_csv(csv_path, dtype={uuid_col: str, phone_col: str})
-        print(f"CSV file read from '{csv_path}' with {len(df)} rows.")
-
-        generated_count = 0
-        skipped_count = 0
-        for index, row in df.iterrows():
-            uuid_value = row.get(uuid_col)
-            phone_value = row.get(phone_col)
-            
-            # UUID boş ise satırı atla
-            if pd.isna(uuid_value) or not str(uuid_value).strip():
-                print(f"Skipping row {index+2}: empty UUID.")
-                skipped_count += 1
-                continue
-                
-            uuid_value = str(uuid_value).strip()
-            # Dosya adı için telefon numarasını temizle; uygun değilse UUID kullan
-            safe_filename = clean_phone_number(str(phone_value)) if phone_value and str(phone_value).strip() else uuid_value
-            if not safe_filename:
-                print(f"Row {index+2}: Using UUID as filename due to invalid phone.")
-                safe_filename = uuid_value
-
-            qr = qrcode.QRCode(
-                version=1,
-                error_correction=qrcode.constants.ERROR_CORRECT_L,
-                box_size=5,  # Daha büyük QR kod için ayarlanmış
-                border=4,
-            )
-            qr.add_data(uuid_value)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            output_path = os.path.join(output_dir, f"{safe_filename}.png")
-            try:
-                if os.path.exists(output_path):
-                    print(f"Row {index+2}: '{output_path}' exists. Overwriting.")
-                img.save(output_path)
-                generated_count += 1
-            except Exception as e:
-                print(f"Error saving QR for row {index+2} with UUID '{uuid_value}': {e}")
-                skipped_count += 1
-
-        print("-" * 20)
-        print("QR Code Generation Summary:")
-        print(f"  Successfully generated: {generated_count}")
-        print(f"  Skipped: {skipped_count}")
-    except Exception as e:
-        print(f"An unexpected error occurred during QR code generation: {e}")
+from QRGenerator import generate_qr_codes_from_csv
 
 # --- Excel with QR Code Generation ---
 def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
@@ -244,10 +193,17 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
         os.makedirs(excel_dir)
     wb.save(excel_output_path)
 
+# --- File Operations ---
+from FileOperations import create_directory_if_not_exists
+
 # --- Main Execution ---
 if __name__ == "__main__":
     csv_file = process_excel(EXCEL_FILE_PATH, PHONE_COLUMN_NAME, UUID_COLUMN_NAME, COUNTER_COLUMN_NAME)
     if csv_file:
+        # Ensure output directories exist
+        create_directory_if_not_exists(QR_OUTPUT_DIR)
+        create_directory_if_not_exists(os.path.dirname('output/excel/'))
+
         # QR kod üretimi için telefon sütunu ismi 'mobile' olmalı
         generate_qr_codes_from_csv(csv_file, UUID_COLUMN_NAME, 'mobile', QR_OUTPUT_DIR)
         print("QR code generation completed.")
