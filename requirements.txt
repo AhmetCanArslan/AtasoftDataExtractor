@@ -2,3 +2,4 @@ pandas
 openpyxl
 qrcode
 pillow
+firebase-admin
