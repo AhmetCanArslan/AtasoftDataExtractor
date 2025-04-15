@@ -1,6 +1,6 @@
 # DataExtractor Project
 
-**Note:** This project was developed in response to receiving an overwhelming number of applications through the AI Summit Erzurum application forms, and as a solution for QR code–based entry, design, and distribution.
+**Note:** This project was developed in response to receiving an overwhelming number of applications through the AI Summit Erzurum application forms. It serves as a solution for QR code–based entry, design, and distribution, automating the process and enabling the functionality of the associated mobile application by synchronizing participant data.
 
 ## About the Project
 DataExtractor processes data from an Excel file, generates unique identifiers and QR codes, designs the QR codes by overlaying them onto a template, optionally syncs data with Firebase Firestore, and sends the designed QR codes via email to participants. This project performs the following operations:
