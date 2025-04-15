@@ -99,6 +99,7 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
     *   Ensure the Firebase service account key (`qr-deneme.json`) is in the project root directory.
 2.  **Configure Environment**: Create and populate the `.env` file as described in the "Configuration" section.
 3.  **Run the Main Script**: Execute the following command from the project directory:
+
     ```bash
     python DataExtractor.py
     ```
