@@ -4,3 +4,4 @@ qrcode
 pillow
 firebase-admin
 tqdm
+python-dotenv

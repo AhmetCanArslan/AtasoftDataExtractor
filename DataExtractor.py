@@ -10,16 +10,29 @@ import subprocess # Added for running the sync script
 import sys # Added for getting python executable path
 from FileOperations import create_directory_if_not_exists, clean_phone_number # Import clean_phone_number
 from QRDesign import overlay_qr_on_template
+from MailSender import send_qr_codes  # Import send_qr_codes function
+from dotenv import load_dotenv  # Import dotenv to load environment variables
+
+# Load environment variables from .env file
+load_dotenv()
 
 # --- Configuration ---
-EXCEL_FILE_PATH = 'yanitlar.xlsx'
-PHONE_COLUMN_NAME = 'Telefon numaranız'
-UUID_COLUMN_NAME = 'UUID'
-COUNTER_COLUMN_NAME = 'Counter'
-NAMESPACE = uuid.NAMESPACE_DNS
-CSV_OUTPUT_DIR = os.path.join('output', 'csv')
-QR_OUTPUT_DIR = os.path.join('output', 'qr')
-FIREBASE_SYNC_SCRIPT = 'FirebaseSync.py' # Added script name
+EXCEL_FILE_PATH = os.getenv('EXCEL_FILE_PATH')
+PHONE_COLUMN_NAME = os.getenv('PHONE_COLUMN_NAME')
+UUID_COLUMN_NAME = os.getenv('UUID_COLUMN_NAME')
+COUNTER_COLUMN_NAME = os.getenv('COUNTER_COLUMN_NAME')
+CSV_OUTPUT_DIR = os.getenv('CSV_OUTPUT_DIR')
+QR_OUTPUT_DIR = os.getenv('QR_OUTPUT_DIR')
+EXCEL_OUTPUT_PATH = os.getenv('EXCEL_OUTPUT_PATH')
+FIREBASE_SYNC_SCRIPT = os.getenv('FIREBASE_SYNC_SCRIPT')
+
+# Email configuration
+SENDER_EMAIL = os.getenv('SENDER_EMAIL')
+SENDER_PASSWORD = os.getenv('SENDER_PASSWORD')
+SMTP_SERVER = os.getenv('SMTP_SERVER')
+SMTP_PORT = int(os.getenv('SMTP_PORT'))
+
+NAMESPACE = uuid.NAMESPACE_DNS  # Add this line to define the NAMESPACE variable
 
 # --- Utility Functions ---
 
@@ -175,17 +188,32 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
 
 # --- Main Execution ---
 if __name__ == "__main__":
+    # Ask user whether to send emails
+    email_choice = input("Do you want to send emails? (yes/no): ").strip().lower()
+    if email_choice == 'yes':
+        if os.path.exists(CSV_OUTPUT_DIR):
+            send_qr_codes(
+                os.path.join(CSV_OUTPUT_DIR, 'yanitlar.csv'),
+                QR_OUTPUT_DIR,
+                SENDER_EMAIL,
+                SENDER_PASSWORD,
+                SMTP_SERVER,
+                SMTP_PORT
+            )
+        else:
+            print("CSV file not found. Emails cannot be sent.")
+        sys.exit(0)  # Exit after sending emails if chosen
+
     csv_file = process_excel(EXCEL_FILE_PATH, PHONE_COLUMN_NAME, UUID_COLUMN_NAME, COUNTER_COLUMN_NAME)
     if csv_file:
         # Ensure output directories exist
         create_directory_if_not_exists(QR_OUTPUT_DIR)
-        create_directory_if_not_exists(os.path.dirname('output/excel/'))
+        create_directory_if_not_exists(os.path.dirname(EXCEL_OUTPUT_PATH))
 
-        # QR kod üretimi için telefon sütunu ismi 'mobile' olmalı
-        generate_qr_codes_from_csv(csv_file, UUID_COLUMN_NAME, 'mobile', QR_OUTPUT_DIR)
+        # QR code generation
+        generate_qr_codes_from_csv(csv_file, UUID_COLUMN_NAME, 'mail', QR_OUTPUT_DIR)
         print("QR code generation completed.")
-        excel_output_path = os.path.join('output', 'excel', 'qrKodlar.xlsx')
-        generate_excel_with_qr(csv_file, QR_OUTPUT_DIR, excel_output_path)
+        generate_excel_with_qr(csv_file, QR_OUTPUT_DIR, EXCEL_OUTPUT_PATH)
         print("Excel with QR codes generation completed.")
         print("CSV generation completed.")
 
@@ -196,39 +224,37 @@ if __name__ == "__main__":
         overlay_qr_on_template(QR_OUTPUT_DIR, template_image_path, designed_qr_output_dir, csv_path=csv_file)
         print("QR Design process completed.")
 
-        # --- Firebase Synchronization ---
-        print("\n--- Starting Firebase Synchronization ---")
-        try:
-            # Ensure the sync script exists
-            if not os.path.exists(FIREBASE_SYNC_SCRIPT):
-                 print(f"Error: Firebase sync script '{FIREBASE_SYNC_SCRIPT}' not found.")
-            else:
-                # Get the path to the current Python interpreter
-                python_executable = sys.executable
-                # Run the Firebase sync script, passing the CSV path as an argument
-                result = subprocess.run(
-                    [python_executable, FIREBASE_SYNC_SCRIPT, csv_file],
-                    capture_output=True, # Capture stdout/stderr
-                    text=True, # Decode output as text
-                    check=True # Raise an exception if the script fails
-                )
-                print("Firebase sync script output:")
-                print(result.stdout)
-                if result.stderr:
-                    print("Firebase sync script errors:")
-                    print(result.stderr)
-                print("--- Firebase Synchronization Finished ---")
-        except FileNotFoundError:
-             print(f"Error: Python executable not found at '{sys.executable}'. Cannot run sync script.")
-        except subprocess.CalledProcessError as e:
-            print(f"Error: Firebase sync script failed with exit code {e.returncode}.")
-            print("Output:")
-            print(e.stdout)
-            print("Errors:")
-            print(e.stderr)
-        except Exception as e:
-            print(f"An unexpected error occurred during Firebase sync: {e}")
-        # --- End Firebase Synchronization ---
+        # Ask user whether to perform Firebase synchronization
+        firebase_choice = input("Do you want to sync with Firebase? (yes/no): ").strip().lower()
+        if firebase_choice == 'yes':
+            print("\n--- Starting Firebase Synchronization ---")
+            try:
+                if not os.path.exists(FIREBASE_SYNC_SCRIPT):
+                    print(f"Error: Firebase sync script '{FIREBASE_SYNC_SCRIPT}' not found.")
+                else:
+                    python_executable = sys.executable
+                    result = subprocess.run(
+                        [python_executable, FIREBASE_SYNC_SCRIPT, csv_file],
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                    print("Firebase sync script output:")
+                    print(result.stdout)
+                    if result.stderr:
+                        print("Firebase sync script errors:")
+                        print(result.stderr)
+                    print("--- Firebase Synchronization Finished ---")
+            except FileNotFoundError:
+                print(f"Error: Python executable not found at '{sys.executable}'. Cannot run sync script.")
+            except subprocess.CalledProcessError as e:
+                print(f"Error: Firebase sync script failed with exit code {e.returncode}.")
+                print("Output:")
+                print(e.stdout)
+                print("Errors:")
+                print(e.stderr)
+            except Exception as e:
+                print(f"An unexpected error occurred during Firebase sync: {e}")
 
         print("\nAll processes have been completed.")
     else:
