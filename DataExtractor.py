@@ -9,6 +9,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 import subprocess # Added for running the sync script
 import sys # Added for getting python executable path
 from FileOperations import create_directory_if_not_exists, clean_phone_number # Import clean_phone_number
+from QRDesign import overlay_qr_on_template
 
 # --- Configuration ---
 EXCEL_FILE_PATH = 'yanitlar.xlsx'
@@ -187,6 +188,13 @@ if __name__ == "__main__":
         generate_excel_with_qr(csv_file, QR_OUTPUT_DIR, excel_output_path)
         print("Excel with QR codes generation completed.")
         print("CSV generation completed.")
+
+        # Call QRDesign's overlay_qr_on_template function
+        print("\n--- Starting QR Design Process ---")
+        template_image_path = "tasarim.jpg"
+        designed_qr_output_dir = os.path.join('output', 'designed_qr')
+        overlay_qr_on_template(QR_OUTPUT_DIR, template_image_path, designed_qr_output_dir, csv_path=csv_file)
+        print("QR Design process completed.")
 
         # --- Firebase Synchronization ---
         print("\n--- Starting Firebase Synchronization ---")
