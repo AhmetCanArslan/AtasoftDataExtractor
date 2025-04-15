@@ -75,7 +75,7 @@ SENDER_PASSWORD=your_gmail_app_password # Use an App Password if 2FA is enabled
 SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=587
 
-# QR Code Design Image (used by QRDesign.py)
+# QR Code Design Image (used by QRDesign.py) Special thanks to [a0pia](https://github.com/a0pia) for qr design.
 # Ensure the template image (e.g., tasarim.jpg) exists in the root directory
 ```
 
@@ -151,7 +151,7 @@ SMTP_PORT=587
 - Check console output for details on file processing, QR generation, Firebase sync status, and email sending results.
 
 ## Contribution
-This project is open source. Contributions are welcome via pull requests or by opening issues. Special thanks to [a0pia](https://github.com/a0pia) for their qr design.
+This project is open source. Contributions are welcome via pull requests or by opening issues. 
 
 ## License
 This project is licensed under the MIT License. See the `LICENSE` file for details.
