@@ -188,30 +188,18 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    # Ask user whether to send emails
-    email_choice = input("Do you want to send emails? (yes/no): ").strip().lower()
-    if email_choice == 'yes':
-        if os.path.exists(CSV_OUTPUT_DIR):
-            send_qr_codes(
-                os.path.join(CSV_OUTPUT_DIR, 'yanitlar.csv'),
-                QR_OUTPUT_DIR,
-                SENDER_EMAIL,
-                SENDER_PASSWORD,
-                SMTP_SERVER,
-                SMTP_PORT
-            )
-        else:
-            print("CSV file not found. Emails cannot be sent.")
-        sys.exit(0)  # Exit after sending emails if chosen
+    # Define designed QR output directory path earlier
+    designed_qr_output_dir = os.path.join('output', 'designed_qr')
 
     csv_file = process_excel(EXCEL_FILE_PATH, PHONE_COLUMN_NAME, UUID_COLUMN_NAME, COUNTER_COLUMN_NAME)
     if csv_file:
         # Ensure output directories exist
         create_directory_if_not_exists(QR_OUTPUT_DIR)
         create_directory_if_not_exists(os.path.dirname(EXCEL_OUTPUT_PATH))
+        create_directory_if_not_exists(designed_qr_output_dir) # Ensure designed QR dir exists
 
         # QR code generation
-        generate_qr_codes_from_csv(csv_file, UUID_COLUMN_NAME, 'mail', QR_OUTPUT_DIR)
+        generate_qr_codes_from_csv(csv_file, UUID_COLUMN_NAME, 'mobile', QR_OUTPUT_DIR) # Use 'mobile' for filename consistency
         print("QR code generation completed.")
         generate_excel_with_qr(csv_file, QR_OUTPUT_DIR, EXCEL_OUTPUT_PATH)
         print("Excel with QR codes generation completed.")
@@ -220,9 +208,11 @@ if __name__ == "__main__":
         # Call QRDesign's overlay_qr_on_template function
         print("\n--- Starting QR Design Process ---")
         template_image_path = "tasarim.jpg"
-        designed_qr_output_dir = os.path.join('output', 'designed_qr')
-        overlay_qr_on_template(QR_OUTPUT_DIR, template_image_path, designed_qr_output_dir, csv_path=csv_file)
-        print("QR Design process completed.")
+        if not os.path.exists(template_image_path):
+             print(f"Warning: Template image '{template_image_path}' not found. Skipping QR design.")
+        else:
+            overlay_qr_on_template(QR_OUTPUT_DIR, template_image_path, designed_qr_output_dir, csv_path=csv_file)
+            print("QR Design process completed.")
 
         # Ask user whether to perform Firebase synchronization
         firebase_choice = input("Do you want to sync with Firebase? (yes/no): ").strip().lower()
@@ -256,6 +246,25 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"An unexpected error occurred during Firebase sync: {e}")
 
+        # Ask user whether to send emails at the end
+        email_choice = input("Do you want to send emails with designed QR codes? (yes/no): ").strip().lower()
+        if email_choice == 'yes':
+            # Use the csv_file variable generated earlier
+            if os.path.exists(csv_file) and os.path.exists(designed_qr_output_dir):
+                print("\n--- Starting Email Sending Process ---")
+                send_qr_codes(
+                    csv_file, # Use the generated csv_file path
+                    designed_qr_output_dir, # Pass the designed QR directory
+                    SENDER_EMAIL,
+                    SENDER_PASSWORD,
+                    SMTP_SERVER,
+                    SMTP_PORT
+                )
+                print("--- Email Sending Process Finished ---")
+            else:
+                print(f"CSV file '{csv_file}' or designed QR directory '{designed_qr_output_dir}' not found. Emails cannot be sent.")
+                print("There might have been an issue during file generation.")
+
         print("\nAll processes have been completed.")
     else:
-        print("CSV file generation failed. Skipping subsequent steps including Firebase sync.")
+        print("CSV file generation failed. Skipping subsequent steps.")
