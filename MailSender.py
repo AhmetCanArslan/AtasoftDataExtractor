@@ -12,7 +12,7 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
 
     Args:
         csv_path (str): Path to the CSV file containing recipient details.
-        qr_dir (str): Directory containing the QR code images to be sent (e.g., designed QR codes).
+        qr_dir (str): Directory containing the designed QR code images to be sent.
         sender_email (str): Sender's email address.
         sender_password (str): Sender's email password.
         smtp_server (str): SMTP server address.
@@ -20,7 +20,7 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
     """
     # Read the CSV file
     df = pd.read_csv(csv_path, dtype=str)
-    
+
     # Set up the SMTP server
     try:
         server = smtplib.SMTP(smtp_server, smtp_port)
@@ -40,14 +40,14 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
             print(f"Skipping row due to missing email or mobile: {row}")
             continue
 
-        # Find the QR code file (look for the designed version)
+        # Find the designed QR code file
         qr_file_path = os.path.join(qr_dir, f"{mobile}_designed.png")
         if not os.path.exists(qr_file_path):
             print(f"Designed QR code not found for mobile: {mobile} at path: {qr_file_path}")
             continue
 
         # Create the email
-        subject = "A.I. Summit Erzurum E-Biletiniz"
+        subject = "Your A.I. Summit Erzurum E-Ticket"
 
         # Format participant name
         full_name = row.get('isim', 'Participant').strip()
@@ -58,16 +58,15 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
                 first_middle_names = [name.capitalize() for name in name_parts[:-1]]
                 formatted_name = " ".join(first_middle_names) + " " + last_name
             else:
-                # Handle single-word names (treat as first name)
                 formatted_name = name_parts[0].capitalize()
         else:
-            formatted_name = 'Participant' # Default if 'isim' is empty or 'Participant'
+            formatted_name = 'Participant'
 
         body = (
             f"Sevgili {formatted_name},\n\n"
             "Zirveye katılım için hazırladığımız e-biletiniz ekte yer almaktadır.\n\n"
             "Lütfen etkinlik alanında E-Biletinizi hazır bulundurunuz.❗❗\n\n"
-            "Heyecan dolu bu deneyimin bir parçası olmaya hazır olun! Sizlerle buluşmak için sabırsızlanıyoruz.\n"
+            "Heyecan dolu bu deneyimin bir parçası olmaya hazır olun! Sizlerle buluşmak için sabırsızlanıyoruz.\n\n"
             "Etkinlik detayları ve güncellemeler için bizi Instagram’dan takip etmeyi unutmayın:\n\n"
             "https://www.instagram.com/atauniaisummiterzurum\n\n"
             "Görüşmek üzere!\n"
@@ -84,13 +83,11 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
             part = MIMEBase('application', 'octet-stream')
             part.set_payload(attachment.read())
         encoders.encode_base64(part)
-        # Use participant's name for the attachment filename
-        participant_name = row.get('isim', 'Participant') # Keep original name logic for filename for now, or apply formatting here too?
-        # Let's apply formatting to the filename as well for consistency.
-        attachment_filename = f"{formatted_name}.png" # Use formatted name for filename too
+        # Use formatted participant's name for the attachment filename
+        attachment_filename = f"{formatted_name}.png"
         part.add_header(
             'Content-Disposition',
-            f'attachment; filename="{attachment_filename}"', # Enclose filename in quotes for safety
+            f'attachment; filename="{attachment_filename}"', # Enclose filename in quotes
         )
         msg.attach(part)
 

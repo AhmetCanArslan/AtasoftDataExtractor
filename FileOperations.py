@@ -4,28 +4,28 @@ from openpyxl import Workbook
 
 def clean_phone_number(phone_str):
     """
-    Telefon numarasını temizler:
-    1. String'e çevirir,
-    2. Boşlukları ve '+' işaretini kaldırır,
-    3. Başında '0' veya '90' varsa kaldırır,
-    4. 10 haneli değilse boş string döner.
+    Cleans the phone number:
+    1. Converts to string,
+    2. Removes spaces and '+' sign,
+    3. Removes leading '0' or '90',
+    4. Returns an empty string if not 10 digits.
     """
     if not isinstance(phone_str, str):
         phone_str = str(phone_str)
 
-    # Boşlukları ve '+' işaretini kaldır
+    # Remove spaces and '+' sign
     cleaned = phone_str.replace(" ", "").replace("+", "")
 
-    # Başında '90' varsa kaldır
+    # Remove leading '90'
     if cleaned.startswith("90"):
         cleaned = cleaned[2:]
-    # Başında '0' varsa kaldır
+    # Remove leading '0'
     elif cleaned.startswith("0"):
         cleaned = cleaned[1:]
 
-    # 10 haneli değilse uyarı ver ve boş string döndür
+    # If not 10 digits, print a warning and return an empty string
     if len(cleaned) != 10:
-        print(f"Warning: Cleaned phone number '{cleaned}' (orijinal: '{phone_str}') is not exactly 10 digits long. Skipping.")
+        print(f"Warning: Cleaned phone number '{cleaned}' (original: '{phone_str}') is not exactly 10 digits long. Skipping.")
         return ""
 
     return cleaned
@@ -87,20 +87,27 @@ def save_excel_with_qr(df, qr_dir, excel_output_path, uuid_column):
     wb = Workbook()
     ws = wb.active
     ws.title = "QR Kodlar"
-    ws.column_dimensions['A'].width = 20  # QR için sütun genişliği
-    # Başlık satırı oluştur
+    ws.column_dimensions['A'].width = 20  # Column width for QR
+    # Create header row
     headers = ['qr kodlar', 'ad soyad', 'posta', 'numara']
     ws.append(headers)
     row_number = 2
     for _, row in df.iterrows():
-        ws.row_dimensions[row_number].height = 100  # Satır yüksekliğini QR boyutuna göre ayarla
+        ws.row_dimensions[row_number].height = 100  # Adjust row height according to QR size
         uuid_value = row.get(uuid_column, '')
-        img_path = os.path.join(qr_dir, f"{uuid_value}.png")
-        # Diğer sütunlar
+        # Construct the image path using UUID, consistent with QRGenerator logic if filenames are based on UUID
+        # If QRGenerator uses phone numbers for filenames, this needs adjustment
+        # Assuming QRGenerator uses UUID for filenames based on previous context
+        # Update: QRGenerator uses phone number, DataExtractor's generate_excel_with_qr uses phone number. Let's correct this function.
+        mobile = row.get('mobile', '') # Get the mobile number used for QR filename
+        safe_filename = clean_phone_number(mobile) if mobile and str(mobile).strip() else str(uuid_value).strip() # Replicate filename logic
+        img_path = os.path.join(qr_dir, f"{safe_filename}.png") # Use the potentially cleaned phone number or UUID as filename base
+
+        # Other columns
         ws.cell(row=row_number, column=2, value=row.get('isim', ''))
         ws.cell(row=row_number, column=3, value=row.get('mail', ''))
         ws.cell(row=row_number, column=4, value=row.get('mobile', ''))
-        # QR görselini ekle (varsa)
+        # Add QR image (if exists)
         if os.path.exists(img_path):
             from openpyxl.drawing.image import Image as OpenpyxlImage
             img = OpenpyxlImage(img_path)
@@ -109,15 +116,16 @@ def save_excel_with_qr(df, qr_dir, excel_output_path, uuid_column):
             ws.add_image(img, f"A{row_number}")
         else:
             ws.cell(row=row_number, column=1, value="No QR")
+            print(f"Warning: QR image not found for row {row_number-1} at path: {img_path}") # Added warning
         row_number += 1
 
-    # Diğer sütun genişliklerini ayarla
+    # Adjust other column widths
     for col in ['B', 'C', 'D']:
         max_length = 0
         for cell in ws[col]:
             if cell.value:
                 max_length = max(max_length, len(str(cell.value)))
-        ws.column_dimensions[col].width = max_length + 5  # padding ekle
+        ws.column_dimensions[col].width = max_length + 5  # add padding
 
     excel_dir = os.path.dirname(excel_output_path)
     create_directory_if_not_exists(excel_dir)

@@ -99,7 +99,6 @@ def sync_csv_to_firestore(db, csv_path):
                     counter = 0
 
             data = {
-                # Firestore field names match the Kotlin example
                 "Counter": counter,
                 "Ad-Soyad": row[CSV_NAME_COL],
                 "Eposta": row[CSV_EMAIL_COL],
@@ -110,8 +109,8 @@ def sync_csv_to_firestore(db, csv_path):
             batch_count += 1
             upload_count += 1
 
-            # Commit batch periodically to avoid exceeding limits
-            if batch_count >= 499: # Firestore batch limit is 500 operations
+            # Commit batch periodically to avoid exceeding limits (Firestore batch limit is 500 operations)
+            if batch_count >= 499:
                 print(f"Committing batch of {batch_count} documents...")
                 batch.commit()
                 print("Batch committed.")

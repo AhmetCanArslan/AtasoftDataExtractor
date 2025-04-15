@@ -4,29 +4,30 @@ import pandas as pd
 
 def generate_qr_codes_from_csv(csv_path, uuid_column, phone_column, output_dir):
     """
-    Generate QR codes from a CSV file.
+    Generate QR codes from a CSV file, using phone numbers for filenames.
 
     Args:
         csv_path (str): Path to the CSV file.
-        uuid_column (str): Column name for UUIDs.
-        phone_column (str): Column name for phone numbers (not used).
+        uuid_column (str): Column name for UUIDs (data for QR code).
+        phone_column (str): Column name for phone numbers (used for filename).
         output_dir (str): Directory to save the QR codes.
     """
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     df = pd.read_csv(csv_path, dtype=str)
+    generated_count = 0
+    skipped_uuid = 0
+    skipped_phone = 0
     for _, row in df.iterrows():
         uuid_value = row.get(uuid_column, '').strip()
-
         if not uuid_value:
-            print("Skipping row with no valid UUID.")
+            skipped_uuid += 1
             continue
 
-        # Use phone_column value for QR code filenames
         phone_value = row.get(phone_column, '').strip()
         if not phone_value:
-            print("Skipping row with no valid phone number.")
+            skipped_phone += 1
             continue
 
         qr = qrcode.QRCode(
@@ -40,5 +41,14 @@ def generate_qr_codes_from_csv(csv_path, uuid_column, phone_column, output_dir):
 
         img = qr.make_image(fill_color="black", back_color="white")
         img_path = os.path.join(output_dir, f"{phone_value}.png")
-        img.save(img_path)
-        print(f"Generated QR code for phone number: {phone_value}")
+        try:
+            img.save(img_path)
+            generated_count += 1
+        except Exception as e:
+            print(f"Error saving QR code for phone {phone_value}: {e}")
+
+    print(f"\nQR Code Generation Summary:")
+    print(f" - Successfully generated: {generated_count}")
+    print(f" - Skipped (missing UUID): {skipped_uuid}")
+    print(f" - Skipped (missing Phone): {skipped_phone}")
+    print(f" - Total processed: {len(df)}")

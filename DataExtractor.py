@@ -32,7 +32,7 @@ SENDER_PASSWORD = os.getenv('SENDER_PASSWORD')
 SMTP_SERVER = os.getenv('SMTP_SERVER')
 SMTP_PORT = int(os.getenv('SMTP_PORT'))
 
-NAMESPACE = uuid.NAMESPACE_DNS  # Add this line to define the NAMESPACE variable
+NAMESPACE = uuid.NAMESPACE_DNS  
 
 # --- Utility Functions ---
 
@@ -48,7 +48,7 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
             print(f"Error: File not found at '{file_path}'")
             return None
 
-        # Excel dosyasını, telefon sütununu string olarak okuyarak yükle
+        # Load the Excel file, reading the phone column as string
         df = pd.read_excel(file_path, engine='openpyxl', dtype={phone_col: str})
         print(f"Successfully read {len(df)} rows from '{file_path}'.")
         print(f"Columns found: {list(df.columns)}")
@@ -57,32 +57,32 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
             print(f"Error: Column '{phone_col}' not found.")
             return None
             
-        # Telefon sütununu string'e çevir
+        # Convert phone column to string
         df[phone_col] = df[phone_col].astype(str)
 
-        # Telefon numaralarını temizle
+        # Clean phone numbers
         print("Cleaning phone numbers...")
         df['cleaned_phone'] = df[phone_col].apply(clean_phone_number)
         
-        # Temizlenmiş telefon numaralarına göre UUID oluştur
+        # Generate UUID based on cleaned phone numbers
         df[uuid_col] = df['cleaned_phone'].apply(lambda x: generate_uuid_from_phone(x) if x else None)
         print("Generated UUIDs based on cleaned phone numbers.")
         
-        # Geçersiz/boş telefon numarası olan satırların sayısını bildir
+        # Report the count of rows with invalid/empty phone numbers
         invalid_phones = df[df['cleaned_phone'] == ""].shape[0]
         if invalid_phones > 0:
             print(f"WARNING: {invalid_phones} rows have invalid or empty phone numbers after cleaning.")
         
-        # Başlangıç değeri sıfır olan Counter sütunu ekle
+        # Add Counter column with initial value zero
         df[counter_col] = 0
         print(f"Added '{counter_col}' column with initial value 0.")
 
-        # Orijinal telefon sütununu kaldır ve temizlenmiş numarayı kullan
+        # Remove the original phone column and use the cleaned number
         df = df.drop(columns=[phone_col])
         df.rename(columns={'cleaned_phone': 'mobile'}, inplace=True)
         print("Replaced original phone column with cleaned phone numbers.")
 
-        # --- Gereksiz sütunları kaldır ---
+        # --- Remove unnecessary columns ---
         columns_to_remove = [
             'Üniversiteniz',
             'Cinsiyet',
@@ -109,14 +109,14 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         else:
             print("WARNING: None of the specified columns were found.")
 
-        # --- Sütunları yeniden sırala (UUID ve Counter başta gelsin) ---
+        # --- Reorder columns (UUID and Counter come first) ---
         cols = df.columns.tolist()
         if uuid_col in cols: cols.remove(uuid_col)
         if counter_col in cols: cols.remove(counter_col)
         df = df[[uuid_col, counter_col] + cols]
         print(f"Moved '{uuid_col}' and '{counter_col}' columns to the beginning.")
         
-        # Sütun isimlerini yeniden adlandır
+        # Rename column names
         df.rename(columns={
             "Ad-Soyad": "isim",
             "E-posta adresiniz": "mail",
@@ -124,7 +124,7 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         }, inplace=True)
         print("Renamed columns: Ad-Soyad -> isim, E-posta adresiniz -> mail, Telefon numaranız -> mobile")
 
-        # --- CSV çıkışı ---
+        # --- CSV output ---
         if not os.path.exists(CSV_OUTPUT_DIR):
             os.makedirs(CSV_OUTPUT_DIR)
             print(f"Created CSV output directory: '{CSV_OUTPUT_DIR}'")
@@ -145,22 +145,22 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
     wb = Workbook()
     ws = wb.active
     ws.title = "QR Kodlar"
-    ws.column_dimensions['A'].width = 20  # QR için sütun genişliği
-    # Başlık satırı oluştur
+    ws.column_dimensions['A'].width = 20  # Column width for QR
+    # Create header row
     headers = ['qr kodlar', 'ad soyad', 'posta', 'numara']
     ws.append(headers)
     row_number = 2
     for _, row in df.iterrows():
-        ws.row_dimensions[row_number].height = 100  # Satır yüksekliğini QR boyutuna göre ayarla
+        ws.row_dimensions[row_number].height = 100  # Adjust row height according to QR size
         mobile = row.get('mobile', '')
         uuid_value = row.get(f"{UUID_COLUMN_NAME}", '')
         safe_filename = clean_phone_number(mobile) if mobile and str(mobile).strip() else str(uuid_value).strip()
         img_path = os.path.join(qr_dir, f"{safe_filename}.png")
-        # Diğer sütunlar
+        # Other columns
         ws.cell(row=row_number, column=2, value=row.get('isim', ''))
         ws.cell(row=row_number, column=3, value=row.get('mail', ''))
         ws.cell(row=row_number, column=4, value=row.get('mobile', ''))
-        # QR görselini ekle (varsa)
+        # Add QR image (if exists)
         if os.path.exists(img_path):
             img = OpenpyxlImage(img_path)
             img.width = 145
@@ -170,13 +170,13 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
             ws.cell(row=row_number, column=1, value="No QR")
         row_number += 1
 
-    # Diğer sütun genişliklerini ayarla
+    # Adjust other column widths
     for col in ['B', 'C', 'D']:
         max_length = 0
         for cell in ws[col]:
             if cell.value:
                 max_length = max(max_length, len(str(cell.value)))
-        ws.column_dimensions[col].width = max_length + 5  # padding ekle
+        ws.column_dimensions[col].width = max_length + 5  # add padding
 
     excel_dir = os.path.dirname(excel_output_path)
     if not os.path.exists(excel_dir):
