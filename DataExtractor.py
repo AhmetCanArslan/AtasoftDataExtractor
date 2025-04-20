@@ -152,22 +152,26 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
     row_number = 2
     for _, row in df.iterrows():
         ws.row_dimensions[row_number].height = 100  # Adjust row height according to QR size
-        mobile = row.get('mobile', '')
-        uuid_value = row.get(f"{UUID_COLUMN_NAME}", '')
-        safe_filename = clean_phone_number(mobile) if mobile and str(mobile).strip() else str(uuid_value).strip()
-        img_path = os.path.join(qr_dir, f"{safe_filename}.png")
+        mobile = row.get('mobile', '').strip() # Ensure mobile is stripped
+
+        img_path = None
+        if mobile: # Only proceed if mobile is not empty
+            img_path = os.path.join(qr_dir, f"{mobile}.png") # Use mobile directly for filename
+
         # Other columns
         ws.cell(row=row_number, column=2, value=row.get('isim', ''))
         ws.cell(row=row_number, column=3, value=row.get('mail', ''))
         ws.cell(row=row_number, column=4, value=row.get('mobile', ''))
         # Add QR image (if exists)
-        if os.path.exists(img_path):
+        if img_path and os.path.exists(img_path):
             img = OpenpyxlImage(img_path)
             img.width = 145
             img.height = 145
             ws.add_image(img, f"A{row_number}")
         else:
             ws.cell(row=row_number, column=1, value="No QR")
+            if mobile:
+                 print(f"Warning: QR image not found for mobile '{mobile}' at expected path: {img_path}")
         row_number += 1
 
     # Adjust other column widths

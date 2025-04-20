@@ -5,6 +5,10 @@ from email.mime.base import MIMEBase
 from email import encoders
 import os
 import pandas as pd
+from dotenv import load_dotenv # Import dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, smtp_port):
     """
@@ -32,18 +36,22 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
         return
 
     # Iterate through the rows in the CSV file
-    for _, row in df.iterrows():
+    for index, row in df.iterrows(): # Use index for better logging
         recipient_email = row.get('mail', '').strip()
-        mobile = row.get('mobile', '').strip()
+        mobile = row.get('mobile', '').strip() # Ensure mobile is stripped
 
+        # Skip if email or mobile is missing/empty
         if not recipient_email or not mobile:
-            print(f"Skipping row due to missing email or mobile: {row}")
+            print(f"Skipping row {index + 2} due to missing email ('{recipient_email}') or mobile ('{mobile}')")
             continue
 
-        # Find the designed QR code file
-        qr_file_path = os.path.join(qr_dir, f"{mobile}_designed.png")
+        # Construct the expected designed QR code filename
+        expected_filename = f"{mobile}_designed.png"
+        qr_file_path = os.path.join(qr_dir, expected_filename)
+
+        # Check if the designed QR code file exists
         if not os.path.exists(qr_file_path):
-            print(f"Designed QR code not found for mobile: {mobile} at path: {qr_file_path}")
+            print(f"Warning: Designed QR code not found for mobile '{mobile}'. Looked for '{expected_filename}' in '{qr_dir}'. Skipping email for row {index + 2}.")
             continue
 
         # Create the email
@@ -83,11 +91,15 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
             part = MIMEBase('application', 'octet-stream')
             part.set_payload(attachment.read())
         encoders.encode_base64(part)
-        # Use formatted participant's name for the attachment filename
+
+        # Use formatted participant's name directly for the attachment filename
         attachment_filename = f"{formatted_name}.png"
+
+        # Correctly encode the filename parameter for the header
         part.add_header(
             'Content-Disposition',
-            f'attachment; filename="{attachment_filename}"', # Enclose filename in quotes
+            'attachment',
+            filename=attachment_filename
         )
         msg.attach(part)
 
@@ -101,3 +113,114 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
     # Close the SMTP server connection
     server.quit()
     print("All emails have been sent.")
+
+# --- Main block for debugging ---
+if __name__ == "__main__":
+    print("--- Running MailSender in Debug Mode ---")
+
+    # --- Configuration (Load from .env) ---
+    # Use the designed QR directory
+    DESIGNED_QR_DIR = os.path.join('output', 'designed_qr')
+    SENDER_EMAIL = os.getenv('SENDER_EMAIL')
+    SENDER_PASSWORD = os.getenv('SENDER_PASSWORD')
+    SMTP_SERVER = os.getenv('SMTP_SERVER')
+    SMTP_PORT_STR = os.getenv('SMTP_PORT')
+
+    # --- Default Test Recipient ---
+    DEFAULT_RECIPIENT_EMAIL = "yildirimciomer237@gmail.com"
+    DEFAULT_MOBILE = "5380718571" # Used to find the QR code
+    DEFAULT_NAME = "Test User" # Placeholder name for the email
+
+    # --- Basic Validation ---
+    if not all([SENDER_EMAIL, SENDER_PASSWORD, SMTP_SERVER, SMTP_PORT_STR]):
+        print("Error: Missing one or more email configuration variables in .env file.")
+        print("Please ensure SENDER_EMAIL, SENDER_PASSWORD, SMTP_SERVER, SMTP_PORT are set.")
+        exit(1)
+
+    try:
+        SMTP_PORT = int(SMTP_PORT_STR)
+    except ValueError:
+        print(f"Error: Invalid SMTP_PORT value '{SMTP_PORT_STR}'. Must be an integer.")
+        exit(1)
+
+    if not os.path.isdir(DESIGNED_QR_DIR):
+        print(f"Error: Designed QR directory '{DESIGNED_QR_DIR}' not found.")
+        exit(1)
+
+    # --- Construct QR file path for the test user ---
+    expected_filename = f"{DEFAULT_MOBILE}_designed.png"
+    qr_file_path = os.path.join(DESIGNED_QR_DIR, expected_filename)
+
+    if not os.path.exists(qr_file_path):
+        print(f"Error: Designed QR code for test mobile '{DEFAULT_MOBILE}' not found.")
+        print(f"Looked for: {qr_file_path}")
+        exit(1)
+
+    print(f"Attempting to send test email to: {DEFAULT_RECIPIENT_EMAIL}")
+    print(f"Using QR code: {qr_file_path}")
+
+    # --- Set up SMTP Connection ---
+    try:
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        print("Logged in to SMTP server successfully for debug send.")
+    except Exception as e:
+        print(f"Error connecting or logging in to SMTP server: {e}")
+        exit(1)
+
+    # --- Create Email Message ---
+    subject = "TEST - Your A.I. Summit Erzurum E-Ticket"
+    formatted_name = DEFAULT_NAME # Use the default name for the test
+
+    body = (
+        f"Sevgili {formatted_name},\n\n"
+        "--- THIS IS A TEST EMAIL ---\n\n"
+        "Zirveye katılım için hazırladığımız e-biletiniz ekte yer almaktadır.\n\n"
+        "Lütfen etkinlik alanında E-Biletinizi hazır bulundurunuz.❗❗\n\n"
+        "Heyecan dolu bu deneyimin bir parçası olmaya hazır olun! Sizlerle buluşmak için sabırsızlanıyoruz.\n\n"
+        "Etkinlik detayları ve güncellemeler için bizi Instagram’dan takip etmeyi unutmayın:\n\n"
+        "https://www.instagram.com/atauniaisummiterzurum\n\n"
+        "Görüşmek üzere!\n"
+        "ATASOFT Ekibi"
+    )
+    msg = MIMEMultipart()
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = DEFAULT_RECIPIENT_EMAIL
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+
+    # --- Attach QR Code ---
+    try:
+        with open(qr_file_path, 'rb') as attachment:
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(attachment.read())
+        encoders.encode_base64(part)
+        # Use the test name directly for the attachment filename
+        attachment_filename = f"{formatted_name}_TestQR.png"
+
+        # Apply the same header encoding method for consistency
+        part.add_header(
+            'Content-Disposition',
+            'attachment',
+            filename=attachment_filename
+        )
+        msg.attach(part)
+        print(f"Successfully attached QR code: {qr_file_path}")
+    except Exception as e:
+        print(f"Error attaching QR code file '{qr_file_path}': {e}")
+        server.quit()
+        exit(1)
+
+    # --- Send Email ---
+    try:
+        server.sendmail(SENDER_EMAIL, DEFAULT_RECIPIENT_EMAIL, msg.as_string())
+        print(f"Test email successfully sent to {DEFAULT_RECIPIENT_EMAIL}")
+    except Exception as e:
+        print(f"Error sending test email to {DEFAULT_RECIPIENT_EMAIL}: {e}")
+    finally:
+        # --- Close Connection ---
+        server.quit()
+        print("SMTP server connection closed.")
+
+    print("--- MailSender Debug Mode Finished ---")
