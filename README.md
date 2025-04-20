@@ -83,6 +83,7 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
 ## Firebase Setup
 1.  **Create a Firebase Project**:
     Go to the [Firebase Console](https://console.firebase.google.com/) and create a new project.
+
 2.  **Enable Firestore Database**:
     In the Firebase Console, navigate to the Firestore Database section and enable it (choose "Start in production mode" or "Start in test mode" as needed). Note the security rules.
 3.  **Generate Service Account Key**:
@@ -98,6 +99,7 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
     *   Ensure the QR design template image (e.g., `tasarim.jpg`) is in the project root directory.
     *   Ensure the Firebase service account key (`qr-deneme.json`) is in the project root directory.
 2.  **Configure Environment**: Create and populate the `.env` file as described in the "Configuration" section.
+
 3.  **Run the Main Script**: Execute the following command from the project directory:
 
     ```bash
