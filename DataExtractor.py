@@ -124,6 +124,13 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         }, inplace=True)
         print("Renamed columns: Ad-Soyad -> isim, E-posta adresiniz -> mail, Telefon numaranız -> mobile")
 
+        # Convert email column to lowercase
+        if 'mail' in df.columns:
+            df['mail'] = df['mail'].str.lower()
+            print("Converted 'mail' column to lowercase.")
+        else:
+             print("Warning: 'mail' column not found after renaming. Cannot convert to lowercase.")
+
         # --- CSV output ---
         if not os.path.exists(CSV_OUTPUT_DIR):
             os.makedirs(CSV_OUTPUT_DIR)
