@@ -8,8 +8,10 @@ def clean_phone_number(phone_str):
     1. Converts to string,
     2. Removes spaces and '+' sign,
     3. Removes leading '0' or '90',
-    4. Returns an empty string if not 10 digits.
+    4. Returns the cleaned number if not empty, otherwise an empty string.
     """
+    if phone_str is None:
+        return ""
     if not isinstance(phone_str, str):
         phone_str = str(phone_str)
 
@@ -23,10 +25,15 @@ def clean_phone_number(phone_str):
     elif cleaned.startswith("0"):
         cleaned = cleaned[1:]
 
-    # If not 10 digits, print a warning and return an empty string
-    if len(cleaned) != 10:
-        print(f"Warning: Cleaned phone number '{cleaned}' (original: '{phone_str}') is not exactly 10 digits long. Skipping.")
+    # Return empty string if cleaning resulted in an empty string
+    if not cleaned:
+        print(f"Warning: Phone number '{phone_str}' resulted in an empty string after cleaning. Skipping.")
         return ""
+
+    # Removed the 10-digit check. Now returns the cleaned number regardless of length.
+    # Example: If original was ' 123 456', cleaned will be '123456'
+    # Example: If original was '+905551112233', cleaned will be '5551112233'
+    # Example: If original was '055511122', cleaned will be '55511122'
 
     return cleaned
 
