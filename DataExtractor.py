@@ -124,10 +124,19 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         }, inplace=True)
         print("Renamed columns: Ad-Soyad -> isim, E-posta adresiniz -> mail, Telefon numaranız -> mobile")
 
-        # Convert email column to lowercase
+        # Convert email column to lowercase using Turkish-specific handling
         if 'mail' in df.columns:
-            df['mail'] = df['mail'].str.lower()
-            print("Converted 'mail' column to lowercase.")
+            def turkish_lowercase(text):
+                if pd.isna(text):
+                    return text
+                text = str(text)
+                # Replace Turkish 'İ' (U+0130) with 'i' (U+0069)
+                text = text.replace('\u0130', '\u0069')
+                # Apply standard lower() for other characters (e.g., 'I' -> 'ı')
+                return text.lower()
+
+            df['mail'] = df['mail'].apply(turkish_lowercase)
+            print("Applied Turkish-specific lowercase conversion to 'mail' column.")
         else:
              print("Warning: 'mail' column not found after renaming. Cannot convert to lowercase.")
 
