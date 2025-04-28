@@ -1,5 +1,5 @@
 import os
-from PIL import Image
+from PIL import Image # Removed ImageDraw, ImageFont
 import pandas as pd
 from FileOperations import create_directory_if_not_exists
 from tqdm import tqdm

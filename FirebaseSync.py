@@ -14,21 +14,28 @@ CSV_NAME_COL = 'isim'
 CSV_EMAIL_COL = 'mail'
 CSV_PHONE_COL = 'mobile'
 
-# --- Firebase Initialization ---
-def initialize_firebase():
-    """Initializes the Firebase Admin SDK."""
+# --- Firebase Initialization (Moved to CertificateGeneratorSender.py and potentially needed here if not already initialized by subprocess call) ---
+# It's generally better to initialize once per process.
+# If this script is ONLY run via subprocess from DataExtractor AFTER DataExtractor initializes,
+# this might not be needed. However, for standalone execution or robustness, keep it.
+def initialize_firebase_sync():
+    """Initializes the Firebase Admin SDK for the sync script."""
     if not os.path.exists(SERVICE_ACCOUNT_KEY_PATH):
         print(f"Error: Service account key file not found at '{SERVICE_ACCOUNT_KEY_PATH}'")
-        print("Please update SERVICE_ACCOUNT_KEY_PATH in FirebaseSync.py")
         sys.exit(1)
     try:
-        cred = credentials.Certificate(SERVICE_ACCOUNT_KEY_PATH)
-        firebase_admin.initialize_app(cred)
-        print("Firebase Admin SDK initialized successfully.")
+        # Check if Firebase app is already initialized (e.g., by DataExtractor)
+        if not firebase_admin._apps:
+             cred = credentials.Certificate(SERVICE_ACCOUNT_KEY_PATH)
+             firebase_admin.initialize_app(cred)
+             print("Firebase Admin SDK initialized successfully by Sync script.")
+        else:
+             print("Firebase Admin SDK already initialized.")
         return firestore.client()
     except Exception as e:
-        print(f"Error initializing Firebase: {e}")
+        print(f"Error initializing Firebase in Sync script: {e}")
         sys.exit(1)
+
 
 # --- Firestore Operations ---
 def delete_collection(db, collection_ref, batch_size=500):
@@ -138,6 +145,7 @@ if __name__ == "__main__":
     csv_file_path = sys.argv[1]
 
     print("--- Starting Firebase Synchronization ---")
-    db_client = initialize_firebase()
+    # Initialize Firebase specifically for this script run
+    db_client = initialize_firebase_sync()
     sync_csv_to_firestore(db_client, csv_file_path)
     print("--- Firebase Synchronization Complete ---")

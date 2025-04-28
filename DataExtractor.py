@@ -9,9 +9,11 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 import subprocess # Added for running the sync script
 import sys # Added for getting python executable path
 from FileOperations import create_directory_if_not_exists, clean_phone_number # Import clean_phone_number
-from QRDesign import overlay_qr_on_template
-from MailSender import send_qr_codes  # Import send_qr_codes function
-from dotenv import load_dotenv  # Import dotenv to load environment variables
+from QRDesign import overlay_qr_on_template # Removed generate_certificate
+from MailSender import send_qr_codes # Removed send_certificates
+# Removed FirebaseSync imports related to fetching attendees
+from dotenv import load_dotenv
+# Removed tqdm import if only used for certificates
 
 # Load environment variables from .env file
 load_dotenv()
@@ -208,7 +210,7 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    # Define designed QR output directory path earlier
+    # Define output directory paths
     designed_qr_output_dir = os.path.join('output', 'designed_qr')
 
     csv_file = process_excel(EXCEL_FILE_PATH, PHONE_COLUMN_NAME, UUID_COLUMN_NAME, COUNTER_COLUMN_NAME)
@@ -216,25 +218,27 @@ if __name__ == "__main__":
         # Ensure output directories exist
         create_directory_if_not_exists(QR_OUTPUT_DIR)
         create_directory_if_not_exists(os.path.dirname(EXCEL_OUTPUT_PATH))
-        create_directory_if_not_exists(designed_qr_output_dir) # Ensure designed QR dir exists
+        create_directory_if_not_exists(designed_qr_output_dir)
 
-        # QR code generation
-        generate_qr_codes_from_csv(csv_file, UUID_COLUMN_NAME, 'mobile', QR_OUTPUT_DIR) # Use 'mobile' for filename consistency
+        # --- QR code generation and Excel ---
+        generate_qr_codes_from_csv(csv_file, UUID_COLUMN_NAME, 'mobile', QR_OUTPUT_DIR)
         print("QR code generation completed.")
         generate_excel_with_qr(csv_file, QR_OUTPUT_DIR, EXCEL_OUTPUT_PATH)
         print("Excel with QR codes generation completed.")
         print("CSV generation completed.")
 
-        # Call QRDesign's overlay_qr_on_template function
+        # --- QR Design ---
         print("\n--- Starting QR Design Process ---")
         template_image_path = "tasarim.jpg"
         if not os.path.exists(template_image_path):
              print(f"Warning: Template image '{template_image_path}' not found. Skipping QR design.")
+             can_design = False # Still needed for QR emails
         else:
             overlay_qr_on_template(QR_OUTPUT_DIR, template_image_path, designed_qr_output_dir, csv_path=csv_file)
             print("QR Design process completed.")
+            can_design = True
 
-        # Ask user whether to perform Firebase synchronization
+        # --- Firebase Sync ---
         firebase_choice = input("Do you want to sync with Firebase? (yes/no): ").strip().lower()
         if firebase_choice == 'yes':
             print("\n--- Starting Firebase Synchronization ---")
@@ -245,15 +249,11 @@ if __name__ == "__main__":
                     python_executable = sys.executable
                     result = subprocess.run(
                         [python_executable, FIREBASE_SYNC_SCRIPT, csv_file],
-                        capture_output=True,
-                        text=True,
-                        check=True
+                        capture_output=True, text=True, check=True
                     )
                     print("Firebase sync script output:")
                     print(result.stdout)
-                    if result.stderr:
-                        print("Firebase sync script errors:")
-                        print(result.stderr)
+                    if result.stderr: print("Firebase sync script errors:", result.stderr)
                     print("--- Firebase Synchronization Finished ---")
             except FileNotFoundError:
                 print(f"Error: Python executable not found at '{sys.executable}'. Cannot run sync script.")
@@ -266,25 +266,20 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"An unexpected error occurred during Firebase sync: {e}")
 
-        # Ask user whether to send emails at the end
+        # --- Send QR Emails ---
         email_choice = input("Do you want to send emails with designed QR codes? (yes/no): ").strip().lower()
         if email_choice == 'yes':
-            # Use the csv_file variable generated earlier
-            if os.path.exists(csv_file) and os.path.exists(designed_qr_output_dir):
-                print("\n--- Starting Email Sending Process ---")
+            if can_design and os.path.exists(csv_file) and os.path.exists(designed_qr_output_dir):
+                print("\n--- Starting QR Email Sending Process ---")
                 send_qr_codes(
-                    csv_file, # Use the generated csv_file path
-                    designed_qr_output_dir, # Pass the designed QR directory
-                    SENDER_EMAIL,
-                    SENDER_PASSWORD,
-                    SMTP_SERVER,
-                    SMTP_PORT
+                    csv_file, designed_qr_output_dir, SENDER_EMAIL,
+                    SENDER_PASSWORD, SMTP_SERVER, SMTP_PORT
                 )
-                print("--- Email Sending Process Finished ---")
+                print("--- QR Email Sending Process Finished ---")
             else:
-                print(f"CSV file '{csv_file}' or designed QR directory '{designed_qr_output_dir}' not found. Emails cannot be sent.")
-                print("There might have been an issue during file generation.")
+                print(f"Prerequisites not met (Template exists: {can_design}, CSV exists: {os.path.exists(csv_file)}, Designed QRs exist: {os.path.exists(designed_qr_output_dir)}). QR Emails cannot be sent.")
 
         print("\nAll processes have been completed.")
+        print("Note: To generate and send certificates, run 'python CertificateGeneratorSender.py' separately.") # Added note
     else:
         print("CSV file generation failed. Skipping subsequent steps.")
