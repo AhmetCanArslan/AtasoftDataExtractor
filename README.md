@@ -32,7 +32,9 @@ DataExtractor/
 ├── QRGenerator.py          # Generates basic QR code images from CSV data
 ├── QRDesign.py             # Overlays QR codes onto a template image
 ├── FirebaseSync.py         # Handles synchronization with Firebase Firestore
+├── DeleteFirebaseCollection.py # Utility to clear the Firestore collection
 ├── MailSender.py           # Sends emails with designed QR codes
+├── CertificateGeneratorSender.py # Generates and sends attendance certificates
 ├── requirements.txt        # List of required Python packages
 ├── .env                    # Environment variables (file paths, credentials) - **DO NOT COMMIT**
 ├── .gitignore              # Git ignore configuration
@@ -40,12 +42,14 @@ DataExtractor/
 ├── LICENSE                 # Project license file
 ├── qr-deneme.json          # Firebase service account key - **DO NOT COMMIT**
 ├── tasarim.jpg             # Template image for QR code design (example name)
-├── yanitlar.xlsx           # Input Excel file (example name)
+├── input/                  # Directory for input files
+│   └── (Place your .xlsx file here)
 ├── output/                 # Directory for generated files
 │   ├── csv/                # Output CSV files
 │   ├── qr/                 # Output basic QR code images (.png)
 │   ├── designed_qr/        # Output designed QR code images (.png)
-│   └── excel/              # Output Excel file with basic QR codes
+│   ├── excel/              # Output Excel file with basic QR codes
+│   └── certificates/       # Output certificate images (.png)
 └── README.md               # (This) Project documentation
 ```
 
@@ -59,8 +63,8 @@ pip install -r requirements.txt
 Create a file named `.env` in the root directory of the project and add the following variables. Replace the example values with your actual configuration. **Do not commit this file to version control.**
 
 ```dotenv
-# File Paths
-EXCEL_FILE_PATH=yanitlar.xlsx
+# File Paths (Input Excel path is now handled automatically from the 'input' directory)
+# EXCEL_FILE_PATH=yanitlar.xlsx # No longer needed here
 PHONE_COLUMN_NAME=Telefon numaranız # Column name in Excel for phone numbers
 UUID_COLUMN_NAME=UUID
 COUNTER_COLUMN_NAME=Counter
@@ -68,6 +72,8 @@ CSV_OUTPUT_DIR=output/csv
 QR_OUTPUT_DIR=output/qr
 EXCEL_OUTPUT_PATH=output/excel/qrKodlar.xlsx
 FIREBASE_SYNC_SCRIPT=FirebaseSync.py
+# Add path for the delete script if needed, though it's typically run manually
+# FIREBASE_DELETE_SCRIPT=DeleteFirebaseCollection.py
 
 # Email Configuration (for Gmail example)
 SENDER_EMAIL=your_email@gmail.com
@@ -95,10 +101,11 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
 
 ## Usage Instructions
 1.  **Prepare Input Files**:
-    *   Ensure the Excel file (e.g., `yanitlar.xlsx`) is in the project root directory and contains the necessary columns (specified in `.env`).
+    *   Place the **single** Excel file (`.xlsx`) containing participant data into the `input/` directory. Ensure it contains the necessary columns (like the phone number column specified in `.env`).
     *   Ensure the QR design template image (e.g., `tasarim.jpg`) is in the project root directory.
     *   Ensure the Firebase service account key (`qr-deneme.json`) is in the project root directory.
-2.  **Configure Environment**: Create and populate the `.env` file as described in the "Configuration" section.
+    *   For certificate generation: Ensure the certificate template image (e.g., `tasarim.jpg` or another specified file) and the font file (e.g., `arial.ttf`) are in the project root directory.
+2.  **Configure Environment**: Create and populate the `.env` file as described in the "Configuration" section. Make sure `PHONE_COLUMN_NAME` matches the column header in your Excel file.
 
 3.  **Run the Main Script**: Execute the following command from the project directory:
 
@@ -108,18 +115,29 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
 4.  **Follow Prompts**: The script will:
     *   Process the Excel file, generate CSV, basic QR codes, and the Excel output.
     *   Attempt to design the QR codes using the template.
-    *   Ask if you want to sync the data with Firebase. Enter `yes` or `no`.
+    *   Ask if you want to sync the data with Firebase (updates/adds records). Enter `yes` or `no`.
     *   Ask if you want to send emails with the designed QR codes. Enter `yes` or `no`.
 5.  **Check the Outputs**:
     *   **CSV File**: Generated in the directory specified by `CSV_OUTPUT_DIR` in `.env`.
     *   **Basic QR Codes**: PNG files created in the directory specified by `QR_OUTPUT_DIR`.
     *   **Designed QR Codes**: PNG files created in `output/designed_qr/`.
     *   **QR Code Excel File**: The Excel file generated at the path specified by `EXCEL_OUTPUT_PATH`.
-    *   **Firebase Database**: If sync was chosen, data is uploaded/updated in the Firestore `users` collection.
+    *   **Firebase Database**: If sync was chosen, data is uploaded/updated (merged) in the Firestore `users` collection.
     *   **Emails**: If chosen, emails are sent to the addresses in the CSV, with designed QR codes attached. Check the console output for success/error messages.
+5.  **(Optional) Delete Firebase Collection**: If you need to clear the Firestore `users` collection completely, run:
+    ```bash
+    python DeleteFirebaseCollection.py
+    ```
+    You will be asked for confirmation before deletion occurs.
+6.  **(Optional) Generate and Send Certificates**: To generate certificates for attendees (users with `Counter > 0` in Firestore) and email them, run:
+    ```bash
+    python CertificateGeneratorSender.py
+    ```
+    Check the `output/certificates/` directory and console output.
 
 ## Functions and Workflow
-- **`DataExtractor.py`**: Orchestrates the entire workflow.
+- **`DataExtractor.py`**: Orchestrates the main QR generation and distribution workflow.
+    - Finds the input Excel file in the `input/` directory.
     - Calls `process_excel` to read Excel, clean data, generate UUIDs, and save CSV.
     - Calls `generate_qr_codes_from_csv` (from `QRGenerator.py`) to create basic QR images.
     - Calls `generate_excel_with_qr` to create the output Excel file.
@@ -137,22 +155,28 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
     - `overlay_qr_on_template()`: Loads a template image, resizes QR codes, and pastes them onto the template, saving the results.
 - **`FirebaseSync.py`**:
     - Initializes Firebase Admin SDK.
-    - `delete_collection()`: Clears the target Firestore collection before uploading.
-    - `sync_csv_to_firestore()`: Reads the CSV and uploads data to Firestore in batches.
+    - `initialize_firebase_sync()`: Handles SDK initialization.
+    - `delete_collection()`: (Used by `DeleteFirebaseCollection.py`) Clears the target Firestore collection.
+    - `sync_csv_to_firestore()`: Reads the CSV and uploads/updates data to Firestore in batches using `merge=True`.
+- **`DeleteFirebaseCollection.py`**: Standalone script to clear the Firestore collection after confirmation.
+- **`CertificateGeneratorSender.py`**: Standalone script to fetch attendees (Counter > 0) from Firestore, generate certificates, and send them via email.
 - **`MailSender.py`**:
     - `send_qr_codes()`: Reads the CSV, connects to the SMTP server, formats emails, attaches the corresponding *designed* QR code, and sends emails individually.
 
 ## Important Notes
-- The `clean_phone_number()` function in `FileOperations.py` standardizes phone numbers to 10 digits (removing country codes like +90, 90, or leading 0) before UUID generation. Invalid numbers result in skipped rows.
+- The script now automatically looks for a single `.xlsx` file in the `input/` directory. Ensure only one Excel file is present there.
+- The `FirebaseSync.py` script (run via `DataExtractor.py`) now **updates or adds** records to Firestore based on UUID, rather than overwriting the collection. Use `DeleteFirebaseCollection.py` if you need to clear the collection first.
+- The `clean_phone_number()` function in `FileOperations.py` standardizes phone numbers before UUID generation. Invalid numbers result in skipped rows.
 - UUIDs are generated using `uuid5` with the `NAMESPACE_DNS` and the cleaned phone number to ensure consistency.
 - Configure all paths and credentials securely in the `.env` file. **Never commit `.env` or your `qr-deneme.json` file to Git.**
 - Ensure the template image (`tasarim.jpg` or your specified name) exists for the QR design step.
 - For Gmail, you might need to enable "Less secure app access" or preferably generate an "App Password" if you have 2-Factor Authentication enabled.
-- Output directories (`output/csv`, `output/qr`, etc.) are created automatically if they don't exist.
+- Output directories (`input/`, `output/csv`, `output/qr`, etc.) are created automatically if they don't exist.
+- The `CertificateGeneratorSender.py` script runs independently and relies on data already present in Firestore (specifically users with `Counter > 0`).
 
 ## Debugging and Logs
 - The scripts print status messages, warnings, and errors to the console during execution.
-- Check console output for details on file processing, QR generation, Firebase sync status, and email sending results.
+- Check console output for details on file processing, QR generation, Firebase sync status (updates/additions), email sending results, and certificate processing.
 
 ## Contribution
 This project is open source. Contributions are welcome via pull requests or by opening issues. 
