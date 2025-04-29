@@ -63,12 +63,13 @@ def delete_collection(db, collection_ref, batch_size=500):
         sys.exit(1)
 
 def sync_csv_to_firestore(db, csv_path):
-    """Reads CSV and uploads data to Firestore, replacing existing data."""
+    """Reads CSV and uploads data to Firestore, creating new documents or merging with existing ones."""
     if not os.path.exists(csv_path):
         print(f"Error: CSV file not found at '{csv_path}'")
         sys.exit(1)
 
     try:
+        # Ensure Counter column is read as string initially to handle various inputs
         df = pd.read_csv(csv_path, dtype={CSV_UUID_COL: str, CSV_COUNTER_COL: str, CSV_PHONE_COL: str})
         print(f"Read {len(df)} rows from '{csv_path}'.")
     except Exception as e:
@@ -77,12 +78,12 @@ def sync_csv_to_firestore(db, csv_path):
 
     users_ref = db.collection(COLLECTION_NAME)
 
-    # 1. Delete existing data
-    print(f"Attempting to delete all existing documents in '{COLLECTION_NAME}' collection...")
-    delete_collection(db, users_ref)
+    # REMOVED: Deletion of existing data is no longer done here.
+    # print(f"Attempting to delete all existing documents in '{COLLECTION_NAME}' collection...")
+    # delete_collection(db, users_ref)
 
-    # 2. Upload new data
-    print(f"Uploading {len(df)} records to '{COLLECTION_NAME}' collection...")
+    # Upload new data or update existing data
+    print(f"Uploading/Updating {len(df)} records in '{COLLECTION_NAME}' collection...")
     upload_count = 0
     batch = db.batch()
     batch_count = 0
@@ -96,27 +97,34 @@ def sync_csv_to_firestore(db, csv_path):
         try:
             # Ensure Counter is an integer, default to 0 if conversion fails or is NaN/None
             counter_val = row[CSV_COUNTER_COL]
-            if pd.isna(counter_val):
+            if pd.isna(counter_val) or str(counter_val).strip() == '':
                 counter = 0
             else:
                 try:
-                    counter = int(float(counter_val)) # Use float first for potential decimals like '0.0'
+                    # Attempt conversion, handling potential floats like '0.0'
+                    counter = int(float(counter_val))
                 except (ValueError, TypeError):
                     print(f"Warning: Could not convert Counter '{counter_val}' to int for UUID {doc_id}. Defaulting to 0.")
                     counter = 0
 
             data = {
+                # Use specific column names expected by Firestore if they differ from CSV
                 "Counter": counter,
                 "Ad-Soyad": row[CSV_NAME_COL],
                 "Eposta": row[CSV_EMAIL_COL],
                 "Telefon numaranız": row[CSV_PHONE_COL]
+                # Add other fields from CSV as needed
             }
+            # Remove None values to avoid errors during Firestore upload
+            data = {k: v for k, v in data.items() if v is not None and pd.notna(v)}
+
             doc_ref = users_ref.document(doc_id)
-            batch.set(doc_ref, data)
+            # Use merge=True to update existing docs or create new ones
+            batch.set(doc_ref, data, merge=True)
             batch_count += 1
             upload_count += 1
 
-            # Commit batch periodically to avoid exceeding limits (Firestore batch limit is 500 operations)
+            # Commit batch periodically
             if batch_count >= 499:
                 print(f"Committing batch of {batch_count} documents...")
                 batch.commit()
@@ -133,7 +141,7 @@ def sync_csv_to_firestore(db, csv_path):
         batch.commit()
         print("Final batch committed.")
 
-    print(f"Successfully uploaded {upload_count} records to Firestore collection '{COLLECTION_NAME}'.")
+    print(f"Successfully processed {upload_count} records for Firestore collection '{COLLECTION_NAME}'.")
 
 
 # --- Main Execution ---
