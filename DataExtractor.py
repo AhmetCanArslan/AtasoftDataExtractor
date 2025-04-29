@@ -26,7 +26,7 @@ UUID_COLUMN_NAME = os.getenv('UUID_COLUMN_NAME')
 COUNTER_COLUMN_NAME = os.getenv('COUNTER_COLUMN_NAME')
 CSV_OUTPUT_DIR = os.getenv('CSV_OUTPUT_DIR')
 QR_OUTPUT_DIR = os.getenv('QR_OUTPUT_DIR')
-EXCEL_OUTPUT_PATH = os.getenv('EXCEL_OUTPUT_PATH')
+# EXCEL_OUTPUT_PATH = os.getenv('EXCEL_OUTPUT_PATH') # Removed: Path will be generated dynamically
 FIREBASE_SYNC_SCRIPT = os.getenv('FIREBASE_SYNC_SCRIPT')
 
 # Email configuration
@@ -201,10 +201,14 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
                 max_length = max(max_length, len(str(cell.value)))
         ws.column_dimensions[col].width = max_length + 5  # add padding
 
+    # Ensure the directory exists before saving
     excel_dir = os.path.dirname(excel_output_path)
     if not os.path.exists(excel_dir):
         os.makedirs(excel_dir)
     wb.save(excel_output_path)
+    # Add print statement for clarity
+    print(f"Successfully generated Excel with QR codes at: '{excel_output_path}'")
+
 
 # --- File Operations ---
 # from FileOperations import create_directory_if_not_exists # This line is now handled above
@@ -231,25 +235,34 @@ if __name__ == "__main__":
         sys.exit(1)
     else:
         excel_file_path = os.path.join(INPUT_DIR, excel_files[0])
-        print(f"Using input file: '{excel_file_path}'")
+        # Encode path for safe printing
+        safe_excel_file_path_repr = repr(excel_file_path.encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding, errors='replace'))
+        print(f"Using input file: {safe_excel_file_path_repr}") # Use encoded path representation
 
     # Define output directory paths
     designed_qr_output_dir = os.path.join('output', 'designed_qr')
+    excel_output_dir = os.path.join('output', 'excel') # Define Excel output dir
 
     # Pass the dynamically found excel_file_path
     csv_file = process_excel(excel_file_path, PHONE_COLUMN_NAME, UUID_COLUMN_NAME, COUNTER_COLUMN_NAME)
     if csv_file:
         # Ensure output directories exist
         create_directory_if_not_exists(QR_OUTPUT_DIR)
-        create_directory_if_not_exists(os.path.dirname(EXCEL_OUTPUT_PATH))
+        # create_directory_if_not_exists(os.path.dirname(EXCEL_OUTPUT_PATH)) # Removed old static path check
+        create_directory_if_not_exists(excel_output_dir) # Ensure dynamic Excel output dir exists
         create_directory_if_not_exists(designed_qr_output_dir)
 
         # --- QR code generation and Excel ---
         generate_qr_codes_from_csv(csv_file, UUID_COLUMN_NAME, 'mobile', QR_OUTPUT_DIR)
         print("QR code generation completed.")
-        generate_excel_with_qr(csv_file, QR_OUTPUT_DIR, EXCEL_OUTPUT_PATH)
-        print("Excel with QR codes generation completed.")
-        print("CSV generation completed.")
+
+        # Dynamically generate output Excel path
+        base_name = os.path.splitext(os.path.basename(excel_file_path))[0]
+        dynamic_excel_output_path = os.path.join(excel_output_dir, f"{base_name}_modified.xlsx")
+
+        generate_excel_with_qr(csv_file, QR_OUTPUT_DIR, dynamic_excel_output_path) # Use dynamic path
+        # print("Excel with QR codes generation completed.") # Removed, moved inside function
+        print("CSV generation completed.") # This seems misplaced, maybe move after CSV save? Or keep here.
 
         # --- QR Design ---
         print("\n--- Starting QR Design Process ---")

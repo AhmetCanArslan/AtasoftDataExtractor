@@ -45,10 +45,10 @@ DataExtractor/
 ├── input/                  # Directory for input files
 │   └── (Place your .xlsx file here)
 ├── output/                 # Directory for generated files
-│   ├── csv/                # Output CSV files
+│   ├── csv/                # Output CSV files (e.g., input_file.csv)
 │   ├── qr/                 # Output basic QR code images (.png)
 │   ├── designed_qr/        # Output designed QR code images (.png)
-│   ├── excel/              # Output Excel file with basic QR codes
+│   ├── excel/              # Output Excel file with basic QR codes (e.g., input_file_modified.xlsx)
 │   └── certificates/       # Output certificate images (.png)
 └── README.md               # (This) Project documentation
 ```
@@ -70,7 +70,7 @@ UUID_COLUMN_NAME=UUID
 COUNTER_COLUMN_NAME=Counter
 CSV_OUTPUT_DIR=output/csv
 QR_OUTPUT_DIR=output/qr
-EXCEL_OUTPUT_PATH=output/excel/qrKodlar.xlsx
+# EXCEL_OUTPUT_PATH=output/excel/qrKodlar.xlsx # Removed: Filename is now dynamic (e.g., input_file_modified.xlsx)
 FIREBASE_SYNC_SCRIPT=FirebaseSync.py
 # Add path for the delete script if needed, though it's typically run manually
 # FIREBASE_DELETE_SCRIPT=DeleteFirebaseCollection.py
@@ -118,10 +118,10 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
     *   Ask if you want to sync the data with Firebase (updates/adds records). Enter `yes` or `no`.
     *   Ask if you want to send emails with the designed QR codes. Enter `yes` or `no`.
 5.  **Check the Outputs**:
-    *   **CSV File**: Generated in the directory specified by `CSV_OUTPUT_DIR` in `.env`.
+    *   **CSV File**: Generated in the directory specified by `CSV_OUTPUT_DIR` in `.env` (e.g., `output/csv/your_input_file.csv`).
     *   **Basic QR Codes**: PNG files created in the directory specified by `QR_OUTPUT_DIR`.
     *   **Designed QR Codes**: PNG files created in `output/designed_qr/`.
-    *   **QR Code Excel File**: The Excel file generated at the path specified by `EXCEL_OUTPUT_PATH`.
+    *   **QR Code Excel File**: An Excel file generated in `output/excel/` with a name based on your input file (e.g., `your_input_file_modified.xlsx`).
     *   **Firebase Database**: If sync was chosen, data is uploaded/updated (merged) in the Firestore `users` collection.
     *   **Emails**: If chosen, emails are sent to the addresses in the CSV, with designed QR codes attached. Check the console output for success/error messages.
 5.  **(Optional) Delete Firebase Collection**: If you need to clear the Firestore `users` collection completely, run:
@@ -140,7 +140,8 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
     - Finds the input Excel file in the `input/` directory.
     - Calls `process_excel` to read Excel, clean data, generate UUIDs, and save CSV.
     - Calls `generate_qr_codes_from_csv` (from `QRGenerator.py`) to create basic QR images.
-    - Calls `generate_excel_with_qr` to create the output Excel file.
+    - Constructs the output Excel filename dynamically (e.g., `input_file_modified.xlsx`).
+    - Calls `generate_excel_with_qr` to create the output Excel file in `output/excel/`.
     - Calls `overlay_qr_on_template` (from `QRDesign.py`) to create designed QR images.
     - Prompts the user and conditionally runs the `FirebaseSync.py` script via `subprocess`.
     - Prompts the user and conditionally calls `send_qr_codes` (from `MailSender.py`).
@@ -149,6 +150,7 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
     - `clean_phone_number()`: Standardizes phone numbers.
     - `save_csv()`: Saves the processed DataFrame to CSV.
     - `create_directory_if_not_exists()`: Utility for creating output folders.
+    - `save_excel_with_qr()`: Saves the DataFrame with embedded QR images to the specified Excel path.
 - **`QRGenerator.py`**:
     - `generate_qr_codes_from_csv()`: Creates individual QR code PNG files from CSV data (UUID).
 - **`QRDesign.py`**:
