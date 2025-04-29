@@ -19,7 +19,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Configuration ---
-EXCEL_FILE_PATH = os.getenv('EXCEL_FILE_PATH')
+# EXCEL_FILE_PATH = os.getenv('EXCEL_FILE_PATH') # Removed: Path will be determined dynamically
+INPUT_DIR = 'input' # Define the input directory
 PHONE_COLUMN_NAME = os.getenv('PHONE_COLUMN_NAME')
 UUID_COLUMN_NAME = os.getenv('UUID_COLUMN_NAME')
 COUNTER_COLUMN_NAME = os.getenv('COUNTER_COLUMN_NAME')
@@ -210,10 +211,33 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
 
 # --- Main Execution ---
 if __name__ == "__main__":
+    # --- Find Input Excel File ---
+    if not os.path.exists(INPUT_DIR):
+        os.makedirs(INPUT_DIR)
+        print(f"Created directory '{INPUT_DIR}'. Please place your single Excel (.xlsx) file inside it and rerun the script.")
+        sys.exit(1)
+
+    excel_files = [f for f in os.listdir(INPUT_DIR) if f.endswith('.xlsx') and not f.startswith('~')] # Ignore temp files
+
+    if len(excel_files) == 0:
+        print(f"Error: No Excel (.xlsx) file found in the '{INPUT_DIR}' directory.")
+        print("Please place the input Excel file there.")
+        sys.exit(1)
+    elif len(excel_files) > 1:
+        print(f"Error: Multiple Excel (.xlsx) files found in the '{INPUT_DIR}' directory:")
+        for f in excel_files:
+            print(f" - {f}")
+        print("Please ensure only one Excel file is present in the input directory.")
+        sys.exit(1)
+    else:
+        excel_file_path = os.path.join(INPUT_DIR, excel_files[0])
+        print(f"Using input file: '{excel_file_path}'")
+
     # Define output directory paths
     designed_qr_output_dir = os.path.join('output', 'designed_qr')
 
-    csv_file = process_excel(EXCEL_FILE_PATH, PHONE_COLUMN_NAME, UUID_COLUMN_NAME, COUNTER_COLUMN_NAME)
+    # Pass the dynamically found excel_file_path
+    csv_file = process_excel(excel_file_path, PHONE_COLUMN_NAME, UUID_COLUMN_NAME, COUNTER_COLUMN_NAME)
     if csv_file:
         # Ensure output directories exist
         create_directory_if_not_exists(QR_OUTPUT_DIR)
