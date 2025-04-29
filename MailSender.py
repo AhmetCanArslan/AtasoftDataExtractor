@@ -10,6 +10,56 @@ from dotenv import load_dotenv # Import dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Functions for email tracking
+def get_sent_emails(log_file='logs/sent_emails.csv'):
+    """
+    Get a set of email addresses that have already been sent QR codes.
+    
+    Args:
+        log_file (str): Path to the CSV file tracking sent emails.
+        
+    Returns:
+        set: A set of email addresses that have already received QR codes.
+    """
+    # Create the logs directory if it doesn't exist
+    log_dir = os.path.dirname(log_file)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    # If the log file doesn't exist, create an empty one with headers
+    if not os.path.exists(log_file):
+        with open(log_file, 'w', encoding='utf-8') as f:
+            f.write("email,mobile,sent_date\n")
+        return set()
+    
+    # Read the log file and return the set of emails
+    try:
+        sent_df = pd.read_csv(log_file, dtype=str)
+        return set(sent_df['email'].str.lower())
+    except Exception as e:
+        print(f"Warning: Error reading sent emails log: {e}")
+        return set()
+
+def record_sent_email(email, mobile, log_file='logs/sent_emails.csv'):
+    """
+    Record that an email has been sent to a specific address.
+    
+    Args:
+        email (str): Email address that received the QR code.
+        mobile (str): Mobile number associated with the email.
+        log_file (str): Path to the CSV file tracking sent emails.
+    """
+    # Get the current date and time
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Append to the log file
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(f"{email},{mobile},{now}\n")
+    except Exception as e:
+        print(f"Warning: Could not record sent email to log: {e}")
+
 def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, smtp_port):
     """
     Send QR codes via email.
@@ -24,7 +74,11 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
     """
     # Read the CSV file
     df = pd.read_csv(csv_path, dtype=str)
-
+    
+    # Get the list of emails that have already been sent QR codes
+    sent_emails = get_sent_emails()
+    print(f"Found {len(sent_emails)} previously sent emails in log file.")
+    
     # Set up the SMTP server
     try:
         server = smtplib.SMTP(smtp_server, smtp_port)
@@ -35,6 +89,13 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
         print(f"Error connecting to SMTP server: {e}")
         return
 
+    # Track stats
+    sent_count = 0
+    skipped_already_sent = 0
+    skipped_missing_data = 0
+    skipped_missing_qr = 0
+    failed_send_count = 0
+
     # Iterate through the rows in the CSV file
     for index, row in df.iterrows(): # Use index for better logging
         recipient_email = row.get('mail', '').strip()
@@ -43,6 +104,13 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
         # Skip if email or mobile is missing/empty
         if not recipient_email or not mobile:
             print(f"Skipping row {index + 2} due to missing email ('{recipient_email}') or mobile ('{mobile}')")
+            skipped_missing_data += 1
+            continue
+        
+        # Skip if email has already been sent (case insensitive comparison)
+        if recipient_email.lower() in sent_emails:
+            print(f"Skipping row {index + 2}: Email already sent to {recipient_email}")
+            skipped_already_sent += 1
             continue
 
         # Construct the expected designed QR code filename
@@ -52,6 +120,7 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
         # Check if the designed QR code file exists
         if not os.path.exists(qr_file_path):
             print(f"Warning: Designed QR code not found for mobile '{mobile}'. Looked for '{expected_filename}' in '{qr_dir}'. Skipping email for row {index + 2}.")
+            skipped_missing_qr += 1
             continue
 
         # Create the email
@@ -107,12 +176,25 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
         try:
             server.sendmail(sender_email, recipient_email, msg.as_string())
             print(f"Email sent to {recipient_email}")
+            # Record the successful send in the log file
+            record_sent_email(recipient_email, mobile)
+            sent_count += 1
         except Exception as e:
             print(f"Error sending email to {recipient_email}: {e}")
+            failed_send_count += 1
 
     # Close the SMTP server connection
     server.quit()
-    print("All emails have been sent.")
+    
+    # Print summary statistics
+    print("\nEmail Sending Summary:")
+    print(f" - Successfully sent: {sent_count}")
+    print(f" - Skipped (already sent): {skipped_already_sent}")
+    print(f" - Skipped (missing data): {skipped_missing_data}")
+    print(f" - Skipped (missing QR): {skipped_missing_qr}")
+    print(f" - Failed to send: {failed_send_count}")
+    print(f" - Total processed: {len(df)}")
+    print("All emails have been processed.")
 
 # --- Main block for debugging ---
 if __name__ == "__main__":
