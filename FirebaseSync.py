@@ -64,16 +64,21 @@ def delete_collection(db, collection_ref, batch_size=500):
 
 def sync_csv_to_firestore(db, csv_path):
     """Reads CSV and uploads data to Firestore, creating new documents or merging with existing ones."""
+    # Encode path for safe printing, especially on Windows
+    safe_csv_path_repr = repr(csv_path.encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding, errors='replace'))
+
     if not os.path.exists(csv_path):
-        print(f"Error: CSV file not found at '{csv_path}'")
+        print(f"Error: CSV file not found at {safe_csv_path_repr}")
         sys.exit(1)
 
     try:
         # Ensure Counter column is read as string initially to handle various inputs
         df = pd.read_csv(csv_path, dtype={CSV_UUID_COL: str, CSV_COUNTER_COL: str, CSV_PHONE_COL: str})
-        print(f"Read {len(df)} rows from '{csv_path}'.")
+        print(f"Read {len(df)} rows from {safe_csv_path_repr}.")
     except Exception as e:
-        print(f"Error reading CSV file '{csv_path}': {e}")
+        # Print the error type and message separately from the path
+        print(f"Error reading CSV file: {type(e).__name__} - {e}")
+        print(f"(File path attempted: {safe_csv_path_repr})")
         sys.exit(1)
 
     users_ref = db.collection(COLLECTION_NAME)
@@ -151,9 +156,13 @@ if __name__ == "__main__":
         sys.exit(1)
 
     csv_file_path = sys.argv[1]
+    # Encode path for safe printing
+    safe_csv_file_path_repr = repr(csv_file_path.encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding, errors='replace'))
+
 
     print("--- Starting Firebase Synchronization ---")
+    print(f"Processing file: {safe_csv_file_path_repr}") # Use encoded path representation
     # Initialize Firebase specifically for this script run
     db_client = initialize_firebase_sync()
-    sync_csv_to_firestore(db_client, csv_file_path)
+    sync_csv_to_firestore(db_client, csv_file_path) # Pass the original path here
     print("--- Firebase Synchronization Complete ---")
