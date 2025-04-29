@@ -5,6 +5,7 @@ import pandas as pd
 def generate_qr_codes_from_csv(csv_path, uuid_column, phone_column, output_dir):
     """
     Generate QR codes from a CSV file, using phone numbers for filenames.
+    Skips generation if a QR code file for the phone number already exists.
 
     Args:
         csv_path (str): Path to the CSV file.
@@ -19,7 +20,8 @@ def generate_qr_codes_from_csv(csv_path, uuid_column, phone_column, output_dir):
     generated_count = 0
     skipped_uuid = 0
     skipped_phone = 0
-    for _, row in df.iterrows():
+    skipped_existing = 0 # Counter for existing QR codes
+    for index, row in df.iterrows():
         uuid_value = row.get(uuid_column, '').strip()
         if not uuid_value:
             skipped_uuid += 1
@@ -30,6 +32,16 @@ def generate_qr_codes_from_csv(csv_path, uuid_column, phone_column, output_dir):
             skipped_phone += 1
             continue
 
+        # Construct the expected image path
+        img_path = os.path.join(output_dir, f"{phone_value}.png")
+
+        # Check if the QR code file already exists
+        if os.path.exists(img_path):
+            print(f"Skipping row {index + 2}: QR code already exists for phone {phone_value} at '{img_path}'")
+            skipped_existing += 1
+            continue
+
+        # Proceed with QR generation if file doesn't exist
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -51,4 +63,5 @@ def generate_qr_codes_from_csv(csv_path, uuid_column, phone_column, output_dir):
     print(f" - Successfully generated: {generated_count}")
     print(f" - Skipped (missing UUID): {skipped_uuid}")
     print(f" - Skipped (missing Phone): {skipped_phone}")
+    print(f" - Skipped (already exists): {skipped_existing}") # Added existing count
     print(f" - Total processed: {len(df)}")
