@@ -167,7 +167,6 @@ input/
 # Output files (already partially covered, adding specifics)
 # yanitlar.xlsx # Removed if always in input/
 # yanitlar.csv # Keep if specific name is used, or use pattern
-output/csv/*.csv
 output/excel/*.xlsx
 output/qr/*.png
 output/designed_qr/*.png
@@ -176,3 +175,6 @@ output/certificates/*.png
 # Sensitive files
 qr-deneme.json
 .env
+
+# Ignore all CSV files
+*.csv
