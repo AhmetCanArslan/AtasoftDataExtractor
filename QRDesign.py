@@ -1,25 +1,42 @@
 import os
-from PIL import Image # Removed ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont # Added ImageDraw, ImageFont
 import pandas as pd
 from FileOperations import create_directory_if_not_exists
 from tqdm import tqdm
 
 def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, csv_path=None):
     """
-    Overlay QR codes on a template image. Skips if the designed QR already exists.
+    Overlay QR codes and participant names on a template image. Skips if the designed QR already exists.
     
     Args:
         qr_dir (str): Directory containing generated QR codes
         template_path (str): Path to the template image
         output_dir (str): Directory to save the designed QR codes
-        uuid_column (str, optional): Column name for UUIDs in CSV
-        csv_path (str, optional): Path to the CSV file containing data
+        uuid_column (str, optional): Column name for UUIDs in CSV (Not directly used here but kept for signature consistency)
+        csv_path (str, optional): Path to the CSV file containing data (mobile, isim)
     """
     create_directory_if_not_exists(output_dir)
     
+    # --- Font Configuration ---
+    try:
+        # Ensure a suitable font file (e.g., Arial) is available
+        # You might need to adjust the path or install the font
+        font_path = "arial.ttf" # Or specify a full path if needed
+        font_size = 100 # Adjust as needed
+        font = ImageFont.truetype(font_path, font_size)
+        print(f"Loaded font: {font_path}")
+    except IOError:
+        print(f"Warning: Font file not found at '{font_path}'. Using default PIL font.")
+        try:
+            font = ImageFont.load_default() # Fallback to default font
+        except Exception as font_e:
+            print(f"Error: Could not load default font: {font_e}. Cannot add names to images.")
+            font = None # Set font to None if default also fails
+    text_color = (0, 0, 0) # Black text color
+
     # Load the template image
     try:
-        template = Image.open(template_path)
+        template = Image.open(template_path).convert("RGB") # Ensure RGB for drawing color text
         template_width, template_height = template.size
         print(f"Loaded template image: {template_path} ({template_width}x{template_height})")
     except Exception as e:
@@ -30,6 +47,7 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
     processed_count = 0
     skipped_existing = 0 # Counter for existing designed QRs
     skipped_not_found = 0 # Counter for missing basic QRs
+    skipped_missing_name = 0 # Counter for missing names in CSV
 
     if csv_path and os.path.exists(csv_path):
         # Process based on CSV data
@@ -37,6 +55,8 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
         print(f"Processing {len(df)} records from CSV for QR design...")
         for index, row in tqdm(df.iterrows(), total=len(df), desc="Designing QR codes (CSV)"):
             mobile = row.get('mobile', '').strip()
+            participant_name = row.get('isim', '').strip() # Get participant name
+
             if not mobile:
                 continue # Skip rows with no mobile number
 
@@ -45,7 +65,6 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
 
             # Check if the designed QR code file already exists
             if os.path.exists(output_path):
-                # print(f"Skipping row {index + 2}: Designed QR already exists for phone {mobile} at '{output_path}'") # Optional: Can be verbose
                 skipped_existing += 1
                 continue
 
@@ -58,6 +77,7 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
             
             # Create a copy of the template for each QR code
             new_img = template.copy()
+            draw = ImageDraw.Draw(new_img) # Create Draw object
             
             # Load QR code
             try:
@@ -67,19 +87,49 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
                 continue # Skip this QR if it can't be opened
 
             # Calculate position to center the QR code on the blue area
-            # Assuming the blue area is centered and 1500x1500px as shown in the image
-            x_position = (template_width - 1500) // 2
-            y_position = (template_height - 1500) // 2
+            qr_size = 1500 # Size of the QR code to be pasted
+            qr_x_position = (template_width - qr_size) // 2
+            qr_y_position = (template_height - qr_size) // 2
             
             try:
-                qr_img_resized = qr_img.resize((1500, 1500))
+                qr_img_resized = qr_img.resize((qr_size, qr_size))
             except Exception as resize_e:
                 print(f"Error resizing QR image {qr_file_path} for phone {mobile}: {resize_e}")
                 continue # Skip if resizing fails
 
             # Paste the QR code onto the template
-            new_img.paste(qr_img_resized, (x_position, y_position))
-            
+            new_img.paste(qr_img_resized, (qr_x_position, qr_y_position))
+
+            # --- Add Participant Name ---
+            if participant_name and font:
+                # Format name (e.g., capitalize each part)
+                formatted_name = ' '.join(part.capitalize() for part in participant_name.split())
+
+                # Calculate text position
+                try:
+                    # Use textbbox for more accurate width calculation if possible (newer PIL)
+                    bbox = draw.textbbox((0, 0), formatted_name, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    # text_height = bbox[3] - bbox[1] # Not needed for centering x
+                except AttributeError:
+                    # Fallback for older PIL versions
+                    text_width, _ = draw.textsize(formatted_name, font=font)
+
+                text_x_position = (template_width - text_width) / 2
+                # Position text below the QR code area
+                # QR bottom edge is at qr_y_position + qr_size
+                text_y_position = qr_y_position + qr_size + 550
+
+                # Draw the text
+                try:
+                    draw.text((text_x_position, text_y_position), formatted_name, fill=text_color, font=font)
+                except Exception as draw_e:
+                    print(f"Error drawing text for {participant_name} ({mobile}): {draw_e}")
+            elif not participant_name:
+                print(f"Warning: Missing name for mobile {mobile} (Row {index + 2}). Skipping name on image.")
+                skipped_missing_name += 1
+            # No 'else' needed if font failed to load, as 'font' would be None
+
             # Save the result
             try:
                 new_img.save(output_path)
@@ -89,7 +139,9 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
 
     else:
         # Process all QR code files in the directory (Fallback if no CSV)
+        # Note: Participant names cannot be added in this mode
         print("Processing QR files directly from directory (CSV not provided)...")
+        print("Warning: Participant names will not be added to images in this mode.")
         qr_files = [f for f in os.listdir(qr_dir) if f.endswith('.png')]
         for qr_file in tqdm(qr_files, desc="Designing QR codes (Dir)"):
             qr_file_path = os.path.join(qr_dir, qr_file)
@@ -101,7 +153,6 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
 
             # Check if the designed QR code file already exists
             if os.path.exists(output_path):
-                # print(f"Skipping: Designed QR already exists for {base_name} at '{output_path}'") # Optional
                 skipped_existing += 1
                 continue
 
@@ -116,12 +167,13 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
                 continue
 
             # Calculate position to center the QR code on the blue area
-            x_position = (template_width - 1500) // 2
-            y_position = (template_height - 1500) // 2
+            qr_size = 1500
+            x_position = (template_width - qr_size) // 2
+            y_position = (template_height - qr_size) // 2
             
             # Resize QR code to fit the blue area (1500x1500)
             try:
-                qr_img_resized = qr_img.resize((1500, 1500))
+                qr_img_resized = qr_img.resize((qr_size, qr_size))
             except Exception as resize_e:
                 print(f"Error resizing QR image {qr_file_path}: {resize_e}")
                 continue
@@ -141,5 +193,6 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
     print(f" - Skipped (designed QR already exists): {skipped_existing}")
     if csv_path: # Only relevant if processing via CSV
         print(f" - Skipped (basic QR not found): {skipped_not_found}")
+        print(f" - Skipped adding name (missing in CSV): {skipped_missing_name}")
     print(f" - Output directory: '{output_dir}'")
     return True
