@@ -257,21 +257,28 @@ if __name__ == "__main__":
                 template_path=TEMPLATE_IMAGE_PATH,
                 output_dir=CERTIFICATES_OUTPUT_DIR,
                 font_path=FONT_FILE
+                # font_size and text_color use defaults from function definition
             )
             if success:
                 generated_count += 1
         print(f"Finished generating certificates. {generated_count} successfully created.")
 
-        # --- Send Certificates ---
+        # --- Ask before Sending Certificates ---
         if generated_count > 0:
-            send_certificates(
-                attendees, CERTIFICATES_OUTPUT_DIR, SENDER_EMAIL,
-                SENDER_PASSWORD, SMTP_SERVER, SMTP_PORT
-            )
+            send_choice = input(f"Successfully generated {generated_count} certificates. Do you want to send them via email? (yes/no): ").strip().lower()
+            if send_choice == 'yes':
+                print("\n--- Starting Certificate Email Sending Process ---")
+                send_certificates(
+                    attendees, CERTIFICATES_OUTPUT_DIR, SENDER_EMAIL,
+                    SENDER_PASSWORD, SMTP_SERVER, SMTP_PORT
+                )
+                # Message "Finished sending certificate emails." is printed inside send_certificates
+            else:
+                print("Email sending skipped by user.")
         else:
-            print("No certificates were generated, skipping email sending.")
+            print("No certificates were generated, skipping email sending step.")
     else:
-        # Message already printed by get_attendees_from_firebase
+        # Message already printed by get_attendees_from_firebase if no attendees found
         pass
 
     print("\n--- Certificate Generation and Sending Process Finished ---")
