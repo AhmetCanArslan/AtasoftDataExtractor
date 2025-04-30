@@ -86,6 +86,12 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         print("Replaced original phone column with cleaned phone numbers.")
 
         # --- Remove unnecessary columns ---
+        # Define the exact column names to remove, including multi-line ones
+        tc_kimlik_col_name = "TC Kimlik Numarası \n(Bu alanda alınan veriler, ÜNİDES proje kapsamında Gençlik ve Spor Bakanlığı tarafından talep edilmektedir.)"
+        kvkk_col_name = "KVKK AYDINLATMA METNİ" # Note: The original Excel might have slightly different spacing/casing
+        okul_col_name = "Öğrenim gördüğünüz / mezun olduğunuz öğretim kurumu" # Added for removal
+        bolum_col_name = "Öğrenim gördüğünüz / mezun olduğunuz bölüm/dal" # Added for removal
+
         columns_to_remove = [
             'Üniversiteniz',
             'Cinsiyet',
@@ -94,23 +100,48 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
             'Etkinliği nereden duydunuz? ',
             'Etkinliğimizden beklentileriniz nelerdir? ',
             'Eklemek istediğiniz bir şey var mı? ',
-            'KVKK AYDINLATMA METNİ',
-            'Zaman damgası'
+            # 'KVKK AYDINLATMA METNİ', # Removed old version if different
+            kvkk_col_name, # Add the exact KVKK column name
+            tc_kimlik_col_name, # Add the exact TC Kimlik column name
+            okul_col_name, # Add Okul original name
+            bolum_col_name, # Add Bolum original name
+            'Zaman damgası',
+            # Add other potential variations or related columns if needed
+            '13. sütun', # Based on CSV header
+            '12. sütun'  # Based on CSV header
         ]
         removed_cols_count = 0
+        cols_before_removal = df.columns.tolist() # Get columns before removal for accurate checking
+
         print("Attempting to remove specified columns...")
-        for col_name in columns_to_remove:
-            if col_name in df.columns:
-                df = df.drop(columns=[col_name])
-                print(f" - Removed column: '{col_name}'")
-                removed_cols_count += 1
+        # Iterate through a copy of the list to avoid modification issues
+        for col_name_to_check in list(columns_to_remove):
+            # Check against stripped column names in the DataFrame
+            found_col = None
+            for df_col in cols_before_removal:
+                # Strip both the check name and the DataFrame column name for comparison
+                if str(df_col).strip() == str(col_name_to_check).strip():
+                    found_col = df_col # Use the actual column name from the DataFrame
+                    break
+
+            if found_col and found_col in df.columns: # Check if it still exists in df
+                try:
+                    df = df.drop(columns=[found_col])
+                    print(f" - Removed column: '{found_col}' (Matched based on '{col_name_to_check}')")
+                    removed_cols_count += 1
+                except KeyError:
+                    # Should not happen with the check, but as a safeguard
+                    print(f" - INFO: Column '{found_col}' was already removed or not found during drop.")
             else:
-                print(f" - WARNING: Column '{col_name}' not found. Skipping removal.")
+                # Only print warning if the column wasn't found by stripping/matching
+                if not found_col:
+                     print(f" - WARNING: Column matching '{col_name_to_check}' not found. Skipping removal.")
+
 
         if removed_cols_count > 0:
             print(f"Successfully removed {removed_cols_count} columns.")
-        else:
-            print("WARNING: None of the specified columns were found.")
+        # else: # Keep this less verbose unless debugging
+            # print("WARNING: None of the specified columns were found or removed.")
 
         # --- Reorder columns (UUID and Counter come first) ---
         cols = df.columns.tolist()
@@ -119,13 +150,32 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         df = df[[uuid_col, counter_col] + cols]
         print(f"Moved '{uuid_col}' and '{counter_col}' columns to the beginning.")
         
-        # Rename column names
-        df.rename(columns={
+        # Rename column names (ensure these target names exist after removals)
+        rename_map = {
             "Ad-Soyad": "isim",
             "E-posta adresiniz": "mail",
-            "Telefon numaranız": "mobile"
-        }, inplace=True)
-        print("Renamed columns: Ad-Soyad -> isim, E-posta adresiniz -> mail, Telefon numaranız -> mobile")
+            # "Telefon numaranız": "mobile" # This is handled by cleaned_phone rename earlier
+        }
+        actual_rename_map = {}
+        print("Attempting to rename columns...")
+        for original_name, new_name in rename_map.items():
+            # Check against stripped column names
+            found_original_col = None
+            for df_col in df.columns:
+                 if str(df_col).strip() == str(original_name).strip():
+                     found_original_col = df_col
+                     break
+            if found_original_col:
+                 actual_rename_map[found_original_col] = new_name
+                 print(f" - Will rename '{found_original_col}' to '{new_name}'")
+            else:
+                 print(f" - WARNING: Column matching '{original_name}' not found for renaming.")
+
+        df.rename(columns=actual_rename_map, inplace=True)
+        if actual_rename_map:
+            print("Finished renaming columns.")
+        else:
+            print("No columns were renamed.")
 
         # Convert email column to lowercase using Turkish-specific handling
         if 'mail' in df.columns:
@@ -153,6 +203,8 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         return output_csv_path
     except Exception as e:
         print(f"An unexpected error occurred during Excel processing: {e}")
+        import traceback
+        traceback.print_exc() # Print full traceback for debugging
         return None
 
 # --- QR Code Generation ---
