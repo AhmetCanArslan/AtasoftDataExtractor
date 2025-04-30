@@ -75,7 +75,48 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         invalid_phones = df[df['cleaned_phone'] == ""].shape[0]
         if invalid_phones > 0:
             print(f"WARNING: {invalid_phones} rows have invalid or empty phone numbers after cleaning.")
-        
+
+        # --- Handle Duplicates based on Timestamp ---
+        timestamp_col_original_name = 'Zaman damgası'
+        actual_timestamp_col = None
+        for col in df.columns:
+            if str(col).strip() == timestamp_col_original_name:
+                actual_timestamp_col = col
+                break
+
+        if actual_timestamp_col:
+            print(f"Found timestamp column: '{actual_timestamp_col}'. Processing duplicates...")
+            try:
+                # Convert timestamp column to datetime objects, coercing errors
+                df[actual_timestamp_col] = pd.to_datetime(df[actual_timestamp_col], errors='coerce')
+
+                # Drop rows where timestamp conversion failed
+                original_rows = len(df)
+                df.dropna(subset=[actual_timestamp_col], inplace=True)
+                if len(df) < original_rows:
+                    print(f" - WARNING: Removed {original_rows - len(df)} rows due to invalid timestamp format.")
+
+                # Sort by cleaned_phone and then by timestamp (descending)
+                df.sort_values(by=['cleaned_phone', actual_timestamp_col], ascending=[True, False], inplace=True)
+
+                # Keep the first (latest) entry for each phone number
+                rows_before_dedup = len(df)
+                df.drop_duplicates(subset=['cleaned_phone'], keep='first', inplace=True)
+                rows_after_dedup = len(df)
+                removed_duplicates = rows_before_dedup - rows_after_dedup
+                if removed_duplicates > 0:
+                    print(f" - Removed {removed_duplicates} older duplicate entries based on phone number.")
+                else:
+                    print(" - No duplicate phone numbers found to remove.")
+
+            except Exception as e:
+                print(f" - WARNING: Could not process duplicates due to error: {e}. Skipping deduplication.")
+                # Ensure the timestamp column name is still added for removal later if found
+        else:
+            print(f" - WARNING: Timestamp column '{timestamp_col_original_name}' not found. Cannot remove duplicates based on time.")
+            # Set actual_timestamp_col to None explicitly if not found
+            actual_timestamp_col = None # Ensure it's None if not found
+
         # Add Counter column with initial value zero
         df[counter_col] = 0
         print(f"Added '{counter_col}' column with initial value 0.")
@@ -105,11 +146,19 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
             tc_kimlik_col_name, # Add the exact TC Kimlik column name
             okul_col_name, # Add Okul original name
             bolum_col_name, # Add Bolum original name
-            'Zaman damgası',
+            # 'Zaman damgası', # Original name - handled dynamically below
             # Add other potential variations or related columns if needed
             '13. sütun', # Based on CSV header
             '12. sütun'  # Based on CSV header
         ]
+        # Add the actual timestamp column found earlier (if any) to the removal list
+        if actual_timestamp_col:
+             columns_to_remove.append(actual_timestamp_col)
+        elif timestamp_col_original_name not in columns_to_remove:
+             # If not found, still try removing the original name just in case
+             columns_to_remove.append(timestamp_col_original_name)
+
+
         removed_cols_count = 0
         cols_before_removal = df.columns.tolist() # Get columns before removal for accurate checking
 
@@ -118,24 +167,38 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         for col_name_to_check in list(columns_to_remove):
             # Check against stripped column names in the DataFrame
             found_col = None
-            for df_col in cols_before_removal:
-                # Strip both the check name and the DataFrame column name for comparison
-                if str(df_col).strip() == str(col_name_to_check).strip():
-                    found_col = df_col # Use the actual column name from the DataFrame
-                    break
+            # Handle potential NaN or non-string column names gracefully
+            current_df_cols = [str(c) for c in df.columns]
+            col_name_to_check_str = str(col_name_to_check)
 
-            if found_col and found_col in df.columns: # Check if it still exists in df
+            for df_col_str in current_df_cols:
+                # Strip both the check name and the DataFrame column name for comparison
+                if df_col_str.strip() == col_name_to_check_str.strip():
+                    # Find the original column name corresponding to the string version
+                    for original_df_col in df.columns:
+                         if str(original_df_col) == df_col_str:
+                              found_col = original_df_col
+                              break
+                    break # Exit inner loop once found
+
+            if found_col is not None and found_col in df.columns: # Check if it still exists in df
                 try:
                     df = df.drop(columns=[found_col])
-                    print(f" - Removed column: '{found_col}' (Matched based on '{col_name_to_check}')")
+                    print(f" - Removed column: '{found_col}' (Matched based on '{col_name_to_check_str}')")
                     removed_cols_count += 1
                 except KeyError:
                     # Should not happen with the check, but as a safeguard
                     print(f" - INFO: Column '{found_col}' was already removed or not found during drop.")
             else:
                 # Only print warning if the column wasn't found by stripping/matching
-                if not found_col:
-                     print(f" - WARNING: Column matching '{col_name_to_check}' not found. Skipping removal.")
+                # Check if the original name (before stripping) was actually in the list
+                was_in_list = False
+                for item in columns_to_remove:
+                     if str(item).strip() == col_name_to_check_str.strip():
+                          was_in_list = True
+                          break
+                if was_in_list: # Only warn if it was intended to be removed
+                     print(f" - WARNING: Column matching '{col_name_to_check_str}' not found. Skipping removal.")
 
 
         if removed_cols_count > 0:
