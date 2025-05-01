@@ -71,7 +71,6 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
             # Find the basic QR code file
             qr_file_path = os.path.join(qr_dir, f"{mobile}.png")
             if not os.path.exists(qr_file_path):
-                print(f"Warning: Basic QR code not found for phone: {mobile} (Row {index + 2}). Cannot design.")
                 skipped_not_found += 1
                 continue
             
@@ -126,7 +125,6 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
                 except Exception as draw_e:
                     print(f"Error drawing text for {participant_name} ({mobile}): {draw_e}")
             elif not participant_name:
-                print(f"Warning: Missing name for mobile {mobile} (Row {index + 2}). Skipping name on image.")
                 skipped_missing_name += 1
             # No 'else' needed if font failed to load, as 'font' would be None
 

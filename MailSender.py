@@ -103,13 +103,11 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
 
         # Skip if email or mobile is missing/empty
         if not recipient_email or not mobile:
-            print(f"Skipping row {index + 2} due to missing email ('{recipient_email}') or mobile ('{mobile}')")
             skipped_missing_data += 1
             continue
         
         # Skip if email has already been sent (case insensitive comparison)
         if recipient_email.lower() in sent_emails:
-            print(f"Skipping row {index + 2}: Email already sent to {recipient_email}")
             skipped_already_sent += 1
             continue
 
@@ -119,7 +117,6 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
 
         # Check if the designed QR code file exists
         if not os.path.exists(qr_file_path):
-            print(f"Warning: Designed QR code not found for mobile '{mobile}'. Looked for '{expected_filename}' in '{qr_dir}'. Skipping email for row {index + 2}.")
             skipped_missing_qr += 1
             continue
 

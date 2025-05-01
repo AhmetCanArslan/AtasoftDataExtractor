@@ -76,47 +76,6 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         if invalid_phones > 0:
             print(f"WARNING: {invalid_phones} rows have invalid or empty phone numbers after cleaning.")
 
-        # --- Handle Duplicates based on Timestamp ---
-        timestamp_col_original_name = 'Zaman damgası'
-        actual_timestamp_col = None
-        for col in df.columns:
-            if str(col).strip() == timestamp_col_original_name:
-                actual_timestamp_col = col
-                break
-
-        if actual_timestamp_col:
-            print(f"Found timestamp column: '{actual_timestamp_col}'. Processing duplicates...")
-            try:
-                # Convert timestamp column to datetime objects, coercing errors
-                df[actual_timestamp_col] = pd.to_datetime(df[actual_timestamp_col], errors='coerce')
-
-                # Drop rows where timestamp conversion failed
-                original_rows = len(df)
-                df.dropna(subset=[actual_timestamp_col], inplace=True)
-                if len(df) < original_rows:
-                    print(f" - WARNING: Removed {original_rows - len(df)} rows due to invalid timestamp format.")
-
-                # Sort by cleaned_phone and then by timestamp (descending)
-                df.sort_values(by=['cleaned_phone', actual_timestamp_col], ascending=[True, False], inplace=True)
-
-                # Keep the first (latest) entry for each phone number
-                rows_before_dedup = len(df)
-                df.drop_duplicates(subset=['cleaned_phone'], keep='first', inplace=True)
-                rows_after_dedup = len(df)
-                removed_duplicates = rows_before_dedup - rows_after_dedup
-                if removed_duplicates > 0:
-                    print(f" - Removed {removed_duplicates} older duplicate entries based on phone number.")
-                else:
-                    print(" - No duplicate phone numbers found to remove.")
-
-            except Exception as e:
-                print(f" - WARNING: Could not process duplicates due to error: {e}. Skipping deduplication.")
-                # Ensure the timestamp column name is still added for removal later if found
-        else:
-            print(f" - WARNING: Timestamp column '{timestamp_col_original_name}' not found. Cannot remove duplicates based on time.")
-            # Set actual_timestamp_col to None explicitly if not found
-            actual_timestamp_col = None # Ensure it's None if not found
-
         # Add Counter column with initial value zero
         df[counter_col] = 0
         print(f"Added '{counter_col}' column with initial value 0.")
@@ -141,70 +100,49 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
             'Etkinliği nereden duydunuz? ',
             'Etkinliğimizden beklentileriniz nelerdir? ',
             'Eklemek istediğiniz bir şey var mı? ',
-            # 'KVKK AYDINLATMA METNİ', # Removed old version if different
             kvkk_col_name, # Add the exact KVKK column name
             tc_kimlik_col_name, # Add the exact TC Kimlik column name
             okul_col_name, # Add Okul original name
             bolum_col_name, # Add Bolum original name
-            # 'Zaman damgası', # Original name - handled dynamically below
-            # Add other potential variations or related columns if needed
             '13. sütun', # Based on CSV header
             '12. sütun'  # Based on CSV header
         ]
-        # Add the actual timestamp column found earlier (if any) to the removal list
-        if actual_timestamp_col:
-             columns_to_remove.append(actual_timestamp_col)
-        elif timestamp_col_original_name not in columns_to_remove:
-             # If not found, still try removing the original name just in case
-             columns_to_remove.append(timestamp_col_original_name)
-
 
         removed_cols_count = 0
         cols_before_removal = df.columns.tolist() # Get columns before removal for accurate checking
 
         print("Attempting to remove specified columns...")
-        # Iterate through a copy of the list to avoid modification issues
         for col_name_to_check in list(columns_to_remove):
-            # Check against stripped column names in the DataFrame
             found_col = None
-            # Handle potential NaN or non-string column names gracefully
             current_df_cols = [str(c) for c in df.columns]
             col_name_to_check_str = str(col_name_to_check)
 
             for df_col_str in current_df_cols:
-                # Strip both the check name and the DataFrame column name for comparison
                 if df_col_str.strip() == col_name_to_check_str.strip():
-                    # Find the original column name corresponding to the string version
                     for original_df_col in df.columns:
                          if str(original_df_col) == df_col_str:
                               found_col = original_df_col
                               break
-                    break # Exit inner loop once found
+                    break
 
-            if found_col is not None and found_col in df.columns: # Check if it still exists in df
+            if found_col is not None and found_col in df.columns:
                 try:
                     df = df.drop(columns=[found_col])
                     print(f" - Removed column: '{found_col}' (Matched based on '{col_name_to_check_str}')")
                     removed_cols_count += 1
                 except KeyError:
-                    # Should not happen with the check, but as a safeguard
                     print(f" - INFO: Column '{found_col}' was already removed or not found during drop.")
             else:
-                # Only print warning if the column wasn't found by stripping/matching
-                # Check if the original name (before stripping) was actually in the list
                 was_in_list = False
                 for item in columns_to_remove:
                      if str(item).strip() == col_name_to_check_str.strip():
                           was_in_list = True
                           break
-                if was_in_list: # Only warn if it was intended to be removed
+                if was_in_list:
                      print(f" - WARNING: Column matching '{col_name_to_check_str}' not found. Skipping removal.")
-
 
         if removed_cols_count > 0:
             print(f"Successfully removed {removed_cols_count} columns.")
-        # else: # Keep this less verbose unless debugging
-            # print("WARNING: None of the specified columns were found or removed.")
 
         # --- Reorder columns (UUID and Counter come first) ---
         cols = df.columns.tolist()
@@ -217,12 +155,10 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         rename_map = {
             "Ad-Soyad": "isim",
             "E-posta adresiniz": "mail",
-            # "Telefon numaranız": "mobile" # This is handled by cleaned_phone rename earlier
         }
         actual_rename_map = {}
         print("Attempting to rename columns...")
         for original_name, new_name in rename_map.items():
-            # Check against stripped column names
             found_original_col = None
             for df_col in df.columns:
                  if str(df_col).strip() == str(original_name).strip():
@@ -246,9 +182,7 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
                 if pd.isna(text):
                     return text
                 text = str(text)
-                # Replace Turkish 'İ' (U+0130) with 'i' (U+0069)
                 text = text.replace('\u0130', '\u0069')
-                # Apply standard lower() for other characters (e.g., 'I' -> 'ı')
                 return text.lower()
 
             df['mail'] = df['mail'].apply(turkish_lowercase)
@@ -256,10 +190,53 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         else:
              print("Warning: 'mail' column not found after renaming. Cannot convert to lowercase.")
 
-        # --- CSV output ---
+        # --- SAVE INTERMEDIATE CSV (FORM DATA) ---
         if not os.path.exists(CSV_OUTPUT_DIR):
             os.makedirs(CSV_OUTPUT_DIR)
             print(f"Created CSV output directory: '{CSV_OUTPUT_DIR}'")
+        
+        form_csv_filename = os.path.splitext(os.path.basename(file_path))[0] + '_form.csv'
+        form_csv_path = os.path.join(CSV_OUTPUT_DIR, form_csv_filename)
+        try:
+            df.to_csv(form_csv_path, index=False, encoding='utf-8-sig')
+            print(f"Successfully saved intermediate form data CSV to '{form_csv_path}'.")
+        except Exception as e_form_csv:
+            print(f"Warning: Could not save intermediate form data CSV: {e_form_csv}")
+        # --- END SAVE INTERMEDIATE CSV ---
+
+        # --- Handle Duplicates based on Timestamp ---
+        timestamp_col_original_name = 'Zaman damgası'
+        actual_timestamp_col = None
+        for col in df.columns:
+            if str(col).strip() == timestamp_col_original_name:
+                actual_timestamp_col = col
+                break
+
+        if actual_timestamp_col:
+            print(f"Found timestamp column: '{actual_timestamp_col}'. Processing duplicates...")
+            try:
+                df[actual_timestamp_col] = pd.to_datetime(df[actual_timestamp_col], errors='coerce')
+                original_rows = len(df)
+                df.dropna(subset=[actual_timestamp_col], inplace=True)
+                if len(df) < original_rows:
+                    print(f" - WARNING: Removed {original_rows - len(df)} rows due to invalid timestamp format.")
+
+                df.sort_values(by=['mobile', actual_timestamp_col], ascending=[True, False], inplace=True)
+                rows_before_dedup = len(df)
+                df.drop_duplicates(subset=['mobile'], keep='first', inplace=True)
+                rows_after_dedup = len(df)
+                removed_duplicates = rows_before_dedup - rows_after_dedup
+                if removed_duplicates > 0:
+                    print(f" - Removed {removed_duplicates} older duplicate entries based on phone number.")
+                else:
+                    print(" - No duplicate phone numbers found to remove.")
+
+            except Exception as e:
+                print(f" - WARNING: Could not process duplicates due to error: {e}. Skipping deduplication.")
+        else:
+            print(f" - WARNING: Timestamp column '{timestamp_col_original_name}' not found. Cannot remove duplicates based on time.")
+
+        # --- CSV output ---
         output_csv_path = os.path.join(CSV_OUTPUT_DIR, os.path.splitext(os.path.basename(file_path))[0] + '.csv')
         df.to_csv(output_csv_path, index=False, encoding='utf-8-sig')
         print(f"Successfully saved CSV to '{output_csv_path}'.")
@@ -267,7 +244,7 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
     except Exception as e:
         print(f"An unexpected error occurred during Excel processing: {e}")
         import traceback
-        traceback.print_exc() # Print full traceback for debugging
+        traceback.print_exc()
         return None
 
 # --- QR Code Generation ---
@@ -321,7 +298,6 @@ def generate_excel_with_qr(csv_path, qr_dir, excel_output_path):
     if not os.path.exists(excel_dir):
         os.makedirs(excel_dir)
     wb.save(excel_output_path)
-    # Add print statement for clarity
     print(f"Successfully generated Excel with QR codes at: '{excel_output_path}'")
 
 
@@ -350,41 +326,35 @@ if __name__ == "__main__":
         sys.exit(1)
     else:
         excel_file_path = os.path.join(INPUT_DIR, excel_files[0])
-        # Encode path for safe printing
         safe_excel_file_path_repr = repr(excel_file_path.encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding, errors='replace'))
-        print(f"Using input file: {safe_excel_file_path_repr}") # Use encoded path representation
+        print(f"Using input file: {safe_excel_file_path_repr}")
 
     # Define output directory paths
     designed_qr_output_dir = os.path.join('output', 'designed_qr')
-    excel_output_dir = os.path.join('output', 'excel') # Define Excel output dir
+    excel_output_dir = os.path.join('output', 'excel')
 
-    # Pass the dynamically found excel_file_path
     csv_file = process_excel(excel_file_path, PHONE_COLUMN_NAME, UUID_COLUMN_NAME, COUNTER_COLUMN_NAME)
     if csv_file:
-        # Ensure output directories exist
         create_directory_if_not_exists(QR_OUTPUT_DIR)
-        # create_directory_if_not_exists(os.path.dirname(EXCEL_OUTPUT_PATH)) # Removed old static path check
-        create_directory_if_not_exists(excel_output_dir) # Ensure dynamic Excel output dir exists
+        create_directory_if_not_exists(excel_output_dir)
         create_directory_if_not_exists(designed_qr_output_dir)
 
         # --- QR code generation and Excel ---
         generate_qr_codes_from_csv(csv_file, UUID_COLUMN_NAME, 'mobile', QR_OUTPUT_DIR)
         print("QR code generation completed.")
 
-        # Dynamically generate output Excel path
         base_name = os.path.splitext(os.path.basename(excel_file_path))[0]
         dynamic_excel_output_path = os.path.join(excel_output_dir, f"{base_name}_modified.xlsx")
 
-        generate_excel_with_qr(csv_file, QR_OUTPUT_DIR, dynamic_excel_output_path) # Use dynamic path
-        # print("Excel with QR codes generation completed.") # Removed, moved inside function
-        print("CSV generation completed.") # This seems misplaced, maybe move after CSV save? Or keep here.
+        generate_excel_with_qr(csv_file, QR_OUTPUT_DIR, dynamic_excel_output_path)
+        print("CSV generation completed.")
 
         # --- QR Design ---
         print("\n--- Starting QR Design Process ---")
         template_image_path = "tasarim.jpg"
         if not os.path.exists(template_image_path):
              print(f"Warning: Template image '{template_image_path}' not found. Skipping QR design.")
-             can_design = False # Still needed for QR emails
+             can_design = False
         else:
             overlay_qr_on_template(QR_OUTPUT_DIR, template_image_path, designed_qr_output_dir, csv_path=csv_file)
             print("QR Design process completed.")
@@ -432,6 +402,6 @@ if __name__ == "__main__":
                 print(f"Prerequisites not met (Template exists: {can_design}, CSV exists: {os.path.exists(csv_file)}, Designed QRs exist: {os.path.exists(designed_qr_output_dir)}). QR Emails cannot be sent.")
 
         print("\nAll processes have been completed.")
-        print("Note: To generate and send certificates, run 'python CertificateGeneratorSender.py' separately.") # Added note
+        print("Note: To generate and send certificates, run 'python CertificateGeneratorSender.py' separately.")
     else:
         print("CSV file generation failed. Skipping subsequent steps.")

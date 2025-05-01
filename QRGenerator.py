@@ -37,7 +37,6 @@ def generate_qr_codes_from_csv(csv_path, uuid_column, phone_column, output_dir):
 
         # Check if the QR code file already exists
         if os.path.exists(img_path):
-            print(f"Skipping row {index + 2}: QR code already exists for phone {phone_value} at '{img_path}'")
             skipped_existing += 1
             continue
 
