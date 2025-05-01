@@ -91,6 +91,7 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         kvkk_col_name = "KVKK AYDINLATMA METNİ" # Note: The original Excel might have slightly different spacing/casing
         okul_col_name = "Öğrenim gördüğünüz / mezun olduğunuz öğretim kurumu" # Added for removal
         bolum_col_name = "Öğrenim gördüğünüz / mezun olduğunuz bölüm/dal" # Added for removal
+        dogum_tarihi_col_name = "Doğum tarihiniz\n(Bu alanda alınan veriler, ÜNİDES proje kapsamında Gençlik ve Spor Bakanlığı tarafından talep edilmektedir.)" # Added for removal
 
         columns_to_remove = [
             'Üniversiteniz',
@@ -104,6 +105,7 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
             tc_kimlik_col_name, # Add the exact TC Kimlik column name
             okul_col_name, # Add Okul original name
             bolum_col_name, # Add Bolum original name
+            dogum_tarihi_col_name, # Add Dogum Tarihi original name
             '13. sütun', # Based on CSV header
             '12. sütun'  # Based on CSV header
         ]
@@ -237,9 +239,11 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
             print(f" - WARNING: Timestamp column '{timestamp_col_original_name}' not found. Cannot remove duplicates based on time.")
 
         # --- CSV output ---
-        output_csv_path = os.path.join(CSV_OUTPUT_DIR, os.path.splitext(os.path.basename(file_path))[0] + '.csv')
+        # Change filename to include _clean
+        output_csv_filename = os.path.splitext(os.path.basename(file_path))[0] + '_clean.csv'
+        output_csv_path = os.path.join(CSV_OUTPUT_DIR, output_csv_filename)
         df.to_csv(output_csv_path, index=False, encoding='utf-8-sig')
-        print(f"Successfully saved CSV to '{output_csv_path}'.")
+        print(f"Successfully saved final processed CSV to '{output_csv_path}'.")
         return output_csv_path
     except Exception as e:
         print(f"An unexpected error occurred during Excel processing: {e}")
@@ -334,20 +338,22 @@ if __name__ == "__main__":
     excel_output_dir = os.path.join('output', 'excel')
 
     csv_file = process_excel(excel_file_path, PHONE_COLUMN_NAME, UUID_COLUMN_NAME, COUNTER_COLUMN_NAME)
-    if csv_file:
+    if csv_file: # csv_file now holds the path to *_clean.csv
         create_directory_if_not_exists(QR_OUTPUT_DIR)
         create_directory_if_not_exists(excel_output_dir)
         create_directory_if_not_exists(designed_qr_output_dir)
 
         # --- QR code generation and Excel ---
+        # Pass the correct csv_file path (_clean.csv)
         generate_qr_codes_from_csv(csv_file, UUID_COLUMN_NAME, 'mobile', QR_OUTPUT_DIR)
         print("QR code generation completed.")
 
         base_name = os.path.splitext(os.path.basename(excel_file_path))[0]
         dynamic_excel_output_path = os.path.join(excel_output_dir, f"{base_name}_modified.xlsx")
 
+        # Pass the correct csv_file path (_clean.csv)
         generate_excel_with_qr(csv_file, QR_OUTPUT_DIR, dynamic_excel_output_path)
-        print("CSV generation completed.")
+        print("Excel generation with QR completed.") # Corrected print message
 
         # --- QR Design ---
         print("\n--- Starting QR Design Process ---")
@@ -356,6 +362,7 @@ if __name__ == "__main__":
              print(f"Warning: Template image '{template_image_path}' not found. Skipping QR design.")
              can_design = False
         else:
+            # Pass the correct csv_file path (_clean.csv)
             overlay_qr_on_template(QR_OUTPUT_DIR, template_image_path, designed_qr_output_dir, csv_path=csv_file)
             print("QR Design process completed.")
             can_design = True
@@ -369,6 +376,7 @@ if __name__ == "__main__":
                     print(f"Error: Firebase sync script '{FIREBASE_SYNC_SCRIPT}' not found.")
                 else:
                     python_executable = sys.executable
+                    # Pass the correct csv_file path (_clean.csv) to the sync script
                     result = subprocess.run(
                         [python_executable, FIREBASE_SYNC_SCRIPT, csv_file],
                         capture_output=True, text=True, check=True
@@ -391,14 +399,17 @@ if __name__ == "__main__":
         # --- Send QR Emails ---
         email_choice = input("Do you want to send emails with designed QR codes? (yes/no): ").strip().lower()
         if email_choice == 'yes':
+            # Check existence of the correct csv_file (_clean.csv)
             if can_design and os.path.exists(csv_file) and os.path.exists(designed_qr_output_dir):
                 print("\n--- Starting QR Email Sending Process ---")
+                # Pass the correct csv_file path (_clean.csv)
                 send_qr_codes(
                     csv_file, designed_qr_output_dir, SENDER_EMAIL,
                     SENDER_PASSWORD, SMTP_SERVER, SMTP_PORT
                 )
                 print("--- QR Email Sending Process Finished ---")
             else:
+                # Update the check message to reflect the correct csv file name pattern
                 print(f"Prerequisites not met (Template exists: {can_design}, CSV exists: {os.path.exists(csv_file)}, Designed QRs exist: {os.path.exists(designed_qr_output_dir)}). QR Emails cannot be sent.")
 
         print("\nAll processes have been completed.")
