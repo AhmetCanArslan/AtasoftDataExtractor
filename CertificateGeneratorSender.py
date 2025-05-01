@@ -47,11 +47,11 @@ def get_attendees_from_firebase(db):
     users_ref = db.collection(COLLECTION_NAME)
     attendees = []
     try:
-        query = users_ref.where(filter=firestore.FieldFilter('Counter', '>', 0)).stream()
-        print("Fetching attendees from Firebase (Counter > 0)...")
+        query = users_ref.where(filter=firestore.FieldFilter('Counter', '>', 1)).stream()
+        print("Fetching attendees from Firebase (Counter > 1)...")
         docs = list(query)
         if not docs:
-            print("No attendees found with Counter > 0.")
+            print("No attendees found with Counter > 1.")
             return []
 
         for doc in tqdm(docs, desc="Processing attendees"):
