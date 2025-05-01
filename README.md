@@ -45,11 +45,14 @@ DataExtractor/
 ├── input/                  # Directory for input files
 │   └── (Place your .xlsx file here)
 ├── output/                 # Directory for generated files
-│   ├── csv/                # Output CSV files (e.g., input_file.csv)
+│   ├── csv/                # Output CSV files (e.g., input_file_form.csv, input_file_clean.csv)
 │   ├── qr/                 # Output basic QR code images (.png)
 │   ├── designed_qr/        # Output designed QR code images (.png)
 │   ├── excel/              # Output Excel file with basic QR codes (e.g., input_file_modified.xlsx)
 │   └── certificates/       # Output certificate images (.png)
+├── logs/                   # Directory for log files
+│   ├── sent_emails.csv     # Tracks successfully sent QR code emails
+│   └── email_errors.csv    # Tracks email sending errors and skips
 └── README.md               # (This) Project documentation
 ```
 
@@ -113,17 +116,18 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
     python DataExtractor.py
     ```
 4.  **Follow Prompts**: The script will:
-    *   Process the Excel file, generate CSV, basic QR codes, and the Excel output.
+    *   Process the Excel file, generate intermediate and final CSV files, basic QR codes, and the Excel output.
     *   Attempt to design the QR codes using the template.
     *   Ask if you want to sync the data with Firebase (updates/adds records). Enter `yes` or `no`.
     *   Ask if you want to send emails with the designed QR codes. Enter `yes` or `no`.
 5.  **Check the Outputs**:
-    *   **CSV File**: Generated in the directory specified by `CSV_OUTPUT_DIR` in `.env` (e.g., `output/csv/your_input_file.csv`).
+    *   **Intermediate CSV File**: An intermediate CSV (`*_form.csv`) is saved in the directory specified by `CSV_OUTPUT_DIR` before duplicate removal.
+    *   **Final CSV File**: The final processed CSV file (`*_clean.csv`) is generated in the directory specified by `CSV_OUTPUT_DIR` (e.g., `output/csv/your_input_file_clean.csv`) after cleaning, deduplication, and column removal. This file is used for subsequent steps (QR generation, Excel, Firebase sync, Email sending).
     *   **Basic QR Codes**: PNG files created in the directory specified by `QR_OUTPUT_DIR`.
     *   **Designed QR Codes**: PNG files created in `output/designed_qr/`.
     *   **QR Code Excel File**: An Excel file generated in `output/excel/` with a name based on your input file (e.g., `your_input_file_modified.xlsx`).
-    *   **Firebase Database**: If sync was chosen, data is uploaded/updated (merged) in the Firestore `users` collection.
-    *   **Emails**: If chosen, emails are sent to the addresses in the CSV, with designed QR codes attached. Check the console output for success/error messages.
+    *   **Firebase Database**: If sync was chosen, data from `*_clean.csv` is uploaded/updated (merged) in the Firestore `users` collection.
+    *   **Emails**: If chosen, emails are sent to the addresses in `*_clean.csv`, with designed QR codes attached. Check the console output and `logs/` files for success/error messages.
 5.  **(Optional) Delete Firebase Collection**: If you need to clear the Firestore `users` collection completely, run:
     ```bash
     python DeleteFirebaseCollection.py
@@ -138,17 +142,17 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
 ## Functions and Workflow
 - **`DataExtractor.py`**: Orchestrates the main QR generation and distribution workflow.
     - Finds the input Excel file in the `input/` directory.
-    - Calls `process_excel` to read Excel, clean data, generate UUIDs, and save CSV.
-    - Calls `generate_qr_codes_from_csv` (from `QRGenerator.py`) to create basic QR images.
+    - Calls `process_excel` to read Excel, clean data, generate UUIDs, save an intermediate `*_form.csv`, remove duplicates and specified columns (including "Doğum tarihiniz..."), and save the final `*_clean.csv`.
+    - Calls `generate_qr_codes_from_csv` (from `QRGenerator.py`) using `*_clean.csv` to create basic QR images.
     - Constructs the output Excel filename dynamically (e.g., `input_file_modified.xlsx`).
-    - Calls `generate_excel_with_qr` to create the output Excel file in `output/excel/`.
-    - Calls `overlay_qr_on_template` (from `QRDesign.py`) to create designed QR images.
-    - Prompts the user and conditionally runs the `FirebaseSync.py` script via `subprocess`.
-    - Prompts the user and conditionally calls `send_qr_codes` (from `MailSender.py`).
+    - Calls `generate_excel_with_qr` using `*_clean.csv` to create the output Excel file in `output/excel/`.
+    - Calls `overlay_qr_on_template` (from `QRDesign.py`) using `*_clean.csv` to create designed QR images.
+    - Prompts the user and conditionally runs the `FirebaseSync.py` script via `subprocess`, passing `*_clean.csv`.
+    - Prompts the user and conditionally calls `send_qr_codes` (from `MailSender.py`) using `*_clean.csv`.
 - **`FileOperations.py`**:
     - `read_excel()`: Reads the input Excel.
     - `clean_phone_number()`: Standardizes phone numbers.
-    - `save_csv()`: Saves the processed DataFrame to CSV.
+    - `save_csv()`: Saves the processed DataFrame to CSV (Note: `DataExtractor.py` now handles the specific naming logic).
     - `create_directory_if_not_exists()`: Utility for creating output folders.
     - `save_excel_with_qr()`: Saves the DataFrame with embedded QR images to the specified Excel path.
 - **`QRGenerator.py`**:
@@ -179,6 +183,8 @@ Special thanks to [a0pia](https://github.com/a0pia) for qr design.
 ## Debugging and Logs
 - The scripts print status messages, warnings, and errors to the console during execution.
 - Check console output for details on file processing, QR generation, Firebase sync status (updates/additions), email sending results, and certificate processing.
+- **`logs/sent_emails.csv`**: Records the email, mobile number, and timestamp for each successfully sent QR code email to prevent duplicates.
+- **`logs/email_errors.csv`**: Records the email, mobile number (if available), reason, and timestamp for emails that failed to send or were skipped (e.g., missing data, missing QR file, SMTP error). This helps diagnose issues with email delivery.
 
 ## Contribution
 This project is open source. Contributions are welcome via pull requests or by opening issues. 
