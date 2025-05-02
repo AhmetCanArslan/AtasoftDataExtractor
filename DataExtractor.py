@@ -213,6 +213,8 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
             if str(col).strip() == timestamp_col_original_name:
                 actual_timestamp_col = col
                 break
+        
+        differences_df = pd.DataFrame(columns=df.columns) # Initialize empty differences dataframe
 
         if actual_timestamp_col:
             print(f"Found timestamp column: '{actual_timestamp_col}'. Processing duplicates...")
@@ -224,12 +226,44 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
                     print(f" - WARNING: Removed {original_rows - len(df)} rows due to invalid timestamp format.")
 
                 df.sort_values(by=['mobile', actual_timestamp_col], ascending=[True, False], inplace=True)
+                
+                # Identify duplicates before dropping them
+                duplicates_mask = df.duplicated(subset=['mobile'], keep='first')
+                differences_df = df[duplicates_mask].copy() # These are the rows that will be dropped
+                
                 rows_before_dedup = len(df)
-                df.drop_duplicates(subset=['mobile'], keep='first', inplace=True)
+                df.drop_duplicates(subset=['mobile'], keep='first', inplace=True) # Keep the first (latest)
                 rows_after_dedup = len(df)
                 removed_duplicates = rows_before_dedup - rows_after_dedup
+                
                 if removed_duplicates > 0:
                     print(f" - Removed {removed_duplicates} older duplicate entries based on phone number.")
+                    
+                    # Add Reason column and remove UUID/Counter columns from differences_df
+                    if not differences_df.empty:
+                        differences_df['Reason'] = 'Older duplicate entry'
+                        
+                        # Define columns to drop from the differences file (KEEP timestamp)
+                        cols_to_drop_from_diff = []
+                        if uuid_col in differences_df.columns:
+                            cols_to_drop_from_diff.append(uuid_col)
+                        if counter_col in differences_df.columns:
+                            cols_to_drop_from_diff.append(counter_col)
+
+                        if cols_to_drop_from_diff:
+                            differences_df = differences_df.drop(columns=cols_to_drop_from_diff)
+                        
+                        # Sort the differences by mobile number
+                        differences_df.sort_values(by=['mobile'], ascending=True, inplace=True)
+
+                        # Save the differences (dropped rows)
+                        diff_csv_filename = os.path.splitext(os.path.basename(file_path))[0] + '_differences.csv'
+                        diff_csv_path = os.path.join(CSV_OUTPUT_DIR, diff_csv_filename)
+                        try:
+                            differences_df.to_csv(diff_csv_path, index=False, encoding='utf-8-sig')
+                            print(f"Successfully saved sorted dropped duplicate rows (with reason, timestamp; without UUID/Counter) to '{diff_csv_path}'.")
+                        except Exception as e_diff_csv:
+                            print(f"Warning: Could not save differences CSV: {e_diff_csv}")
                 else:
                     print(" - No duplicate phone numbers found to remove.")
 
@@ -238,8 +272,7 @@ def process_excel(file_path, phone_col, uuid_col, counter_col):
         else:
             print(f" - WARNING: Timestamp column '{timestamp_col_original_name}' not found. Cannot remove duplicates based on time.")
 
-        # --- CSV output ---
-        # Change filename to include _clean
+        # --- Final Clean CSV output ---
         output_csv_filename = os.path.splitext(os.path.basename(file_path))[0] + '_clean.csv'
         output_csv_path = os.path.join(CSV_OUTPUT_DIR, output_csv_filename)
         df.to_csv(output_csv_path, index=False, encoding='utf-8-sig')
