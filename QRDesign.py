@@ -4,6 +4,47 @@ import pandas as pd
 from FileOperations import create_directory_if_not_exists
 from tqdm import tqdm
 
+# --- Helper function for Turkish character capitalization ---
+def turkish_capitalize_name(name):
+    """Capitalizes a name string respecting Turkish characters."""
+    if not isinstance(name, str):
+        return "" # Return empty string if input is not a string
+
+    def turkish_upper(char):
+        if char == 'i':
+            return 'İ'
+        elif char == 'ı':
+            return 'I'
+        else:
+            # Use standard upper() for other characters, handling potential errors
+            try:
+                return char.upper()
+            except AttributeError:
+                return char # Return original if not a string-like char
+
+    def turkish_lower(char):
+        if char == 'İ':
+            return 'i'
+        elif char == 'I':
+            return 'ı'
+        else:
+            # Use standard lower() for other characters, handling potential errors
+            try:
+                return char.lower()
+            except AttributeError:
+                return char # Return original if not a string-like char
+
+    parts = name.split()
+    capitalized_parts = []
+    for part in parts:
+        if not part:
+            continue
+        first_char = turkish_upper(part[0])
+        rest_chars = "".join(turkish_lower(c) for c in part[1:])
+        capitalized_parts.append(first_char + rest_chars)
+    return " ".join(capitalized_parts)
+# --- End of helper function ---
+
 def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, csv_path=None):
     """
     Overlay QR codes and participant names on a template image. Skips if the designed QR already exists.
@@ -101,29 +142,36 @@ def overlay_qr_on_template(qr_dir, template_path, output_dir, uuid_column=None, 
 
             # --- Add Participant Name ---
             if participant_name and font:
-                # Format name (e.g., capitalize each part)
-                formatted_name = ' '.join(part.capitalize() for part in participant_name.split())
+                # Format name using Turkish-aware capitalization
+                formatted_name = turkish_capitalize_name(participant_name)
 
                 # Calculate text position
                 try:
                     # Use textbbox for more accurate width calculation if possible (newer PIL)
-                    bbox = draw.textbbox((0, 0), formatted_name, font=font)
+                    # Ensure text is treated as string for bbox calculation
+                    bbox = draw.textbbox((0, 0), str(formatted_name), font=font)
                     text_width = bbox[2] - bbox[0]
                     # text_height = bbox[3] - bbox[1] # Not needed for centering x
                 except AttributeError:
                     # Fallback for older PIL versions
-                    text_width, _ = draw.textsize(formatted_name, font=font)
+                    # Ensure text is treated as string for textsize calculation
+                    text_width, _ = draw.textsize(str(formatted_name), font=font)
+                except Exception as bbox_e:
+                     print(f"Warning: Could not calculate text dimensions for '{formatted_name}' ({mobile}): {bbox_e}. Skipping text placement.")
+                     text_width = None # Indicate failure
 
-                text_x_position = (template_width - text_width) / 2
-                # Position text below the QR code area
-                # QR bottom edge is at qr_y_position + qr_size
-                text_y_position = qr_y_position + qr_size + 550
+                if text_width is not None: # Proceed only if width calculation was successful
+                    text_x_position = (template_width - text_width) / 2
+                    # Position text below the QR code area
+                    # QR bottom edge is at qr_y_position + qr_size
+                    text_y_position = qr_y_position + qr_size + 550 # Adjust vertical spacing if needed
 
-                # Draw the text
-                try:
-                    draw.text((text_x_position, text_y_position), formatted_name, fill=text_color, font=font)
-                except Exception as draw_e:
-                    print(f"Error drawing text for {participant_name} ({mobile}): {draw_e}")
+                    # Draw the text
+                    try:
+                        # Ensure text is treated as string for drawing
+                        draw.text((text_x_position, text_y_position), str(formatted_name), fill=text_color, font=font)
+                    except Exception as draw_e:
+                        print(f"Error drawing text for '{formatted_name}' ({mobile}): {draw_e}")
             elif not participant_name:
                 skipped_missing_name += 1
             # No 'else' needed if font failed to load, as 'font' would be None
