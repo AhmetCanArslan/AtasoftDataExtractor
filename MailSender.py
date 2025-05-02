@@ -142,23 +142,13 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
     sent_emails = get_sent_emails()
     print(f"Found {len(sent_emails)} previously sent emails in log file.")
 
-    sent_count = 0
+    # --- Pre-calculate skips and identify candidates ---
+    candidates = []
     skipped_already_sent = 0
     skipped_missing_data = 0
     skipped_missing_qr = 0
-    failed_send_count = 0
-
-    server = None
-    try:
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()
-        server.login(sender_email, sender_password)
-        print("Logged in to the SMTP server successfully.")
-    except Exception as e:
-        print(f"Error connecting to SMTP server: {e}")
-        log_email_error('N/A', 'N/A', f'SMTP Connection/Login Failed: {e}')
-        return
-
+    
+    print("Analyzing CSV data and checking prerequisites...")
     for index, row in df.iterrows():
         recipient_email = row.get('mail', '').strip()
         mobile = row.get('mobile', '').strip()
@@ -179,72 +169,121 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
             skipped_missing_qr += 1
             log_email_error(recipient_email, mobile, f'Missing designed QR file: {expected_filename}')
             continue
+            
+        # If all checks pass, add index and details to candidates list
+        candidates.append({'index': index, 'email': recipient_email, 'mobile': mobile, 'qr_path': qr_file_path})
 
-        subject = "Your A.I. Summit Erzurum E-Ticket"
-        full_name = row.get('isim', 'Participant').strip()
-        formatted_name = 'Participant'
-        if full_name and full_name != 'Participant':
-            name_parts = full_name.split()
-            if len(name_parts) > 1:
-                last_name = name_parts[-1].upper()
-                first_middle_names = [name.capitalize() for name in name_parts[:-1]]
-                formatted_name = " ".join(first_middle_names) + " " + last_name
-            elif len(name_parts) == 1:
-                formatted_name = name_parts[0].capitalize()
+    total_candidates = len(candidates)
+    print(f"Identified {total_candidates} emails to attempt sending.")
+    
+    # --- Initialize counters for sending process ---
+    sent_count = 0
+    failed_send_count = 0
+    processed_candidates_count = 0
 
-        body = (
-            f"Sevgili {formatted_name},\n\n"
-            "Zirveye katılım için hazırladığımız e-biletiniz ekte yer almaktadır.\n\n"
-            "Lütfen etkinlik alanında E-Biletinizi hazır bulundurunuz.❗❗\n\n"
-            "Heyecan dolu bu deneyimin bir parçası olmaya hazır olun! Sizlerle buluşmak için sabırsızlanıyoruz.\n\n"
-            "Etkinlik detayları ve güncellemeler için bizi Instagram’dan takip etmeyi unutmayın:\n\n"
-            "https://www.instagram.com/atauniaisummiterzurum\n\n"
-            "Görüşmek üzere!\n"
-            "ATASOFT Ekibi"
-        )
-        msg = MIMEMultipart()
-        msg['From'] = sender_email
-        msg['To'] = recipient_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain'))
-
+    if total_candidates == 0:
+        print("No emails to send after filtering.")
+    else:
+        # --- Connect to SMTP Server ---
+        server = None
         try:
-            with open(qr_file_path, 'rb') as attachment:
-                part = MIMEBase('application', 'octet-stream')
-                part.set_payload(attachment.read())
-            encoders.encode_base64(part)
-            part.add_header(
-                'Content-Disposition',
-                f'attachment; filename={os.path.basename(qr_file_path)}',
-            )
-            msg.attach(part)
+            server = smtplib.SMTP(smtp_server, smtp_port)
+            server.starttls()
+            server.login(sender_email, sender_password)
+            print("Logged in to the SMTP server successfully.")
         except Exception as e:
-            print(f"Error attaching QR code {qr_file_path} for {recipient_email}: {e}")
-            failed_send_count += 1
-            log_email_error(recipient_email, mobile, f'Error attaching QR file: {e}')
-            continue
+            print(f"Error connecting to SMTP server: {e}")
+            log_email_error('N/A', 'N/A', f'SMTP Connection/Login Failed: {e}')
+            # Log error for all candidates since connection failed
+            for candidate in candidates:
+                 log_email_error(candidate['email'], candidate['mobile'], f'Sending skipped due to SMTP connection failure: {e}')
+            failed_send_count = total_candidates # Mark all as failed for summary
+            candidates = [] # Clear candidates as we can't process them
 
-        try:
-            server.sendmail(sender_email, recipient_email, msg.as_string())
-            print(f"Email sent to {recipient_email}")
-            record_sent_email(recipient_email, mobile)
-            sent_count += 1
-        except Exception as e:
-            print(f"Error sending email to {recipient_email}: {e}")
-            failed_send_count += 1
-            log_email_error(recipient_email, mobile, f'Sending failed: {e}')
+        # --- Process Candidates ---
+        if server: # Proceed only if connection was successful
+            for candidate in candidates:
+                processed_candidates_count += 1
+                remaining_candidates = total_candidates - processed_candidates_count
+                
+                index = candidate['index']
+                recipient_email = candidate['email']
+                mobile = candidate['mobile']
+                qr_file_path = candidate['qr_path']
+                row = df.loc[index] # Get the full row data for name formatting
 
-    if server:
-        server.quit()
-        print("SMTP server connection closed.")
+                # --- Prepare Email ---
+                subject = "Your A.I. Summit Erzurum E-Ticket"
+                full_name = row.get('isim', 'Participant').strip()
+                formatted_name = 'Participant'
+                if full_name and full_name != 'Participant':
+                    name_parts = full_name.split()
+                    if len(name_parts) > 1:
+                        last_name = name_parts[-1].upper()
+                        first_middle_names = [name.capitalize() for name in name_parts[:-1]]
+                        formatted_name = " ".join(first_middle_names) + " " + last_name
+                    elif len(name_parts) == 1:
+                        formatted_name = name_parts[0].capitalize()
+                
+                body = (
+                    f"Sevgili {formatted_name},\n\n"
+                    "Zirveye katılım için hazırladığımız e-biletiniz ekte yer almaktadır.\n\n"
+                    "Lütfen etkinlik alanında E-Biletinizi hazır bulundurunuz.❗❗\n\n"
+                    "Heyecan dolu bu deneyimin bir parçası olmaya hazır olun! Sizlerle buluşmak için sabırsızlanıyoruz.\n\n"
+                    "Etkinlik detayları ve güncellemeler için bizi Instagram’dan takip etmeyi unutmayın:\n\n"
+                    "https://www.instagram.com/atauniaisummiterzurum\n\n"
+                    "Görüşmek üzere!\n"
+                    "ATASOFT Ekibi"
+                )
+                msg = MIMEMultipart()
+                msg['From'] = sender_email
+                msg['To'] = recipient_email
+                msg['Subject'] = subject
+                msg.attach(MIMEText(body, 'plain'))
 
+                # --- Attach QR Code ---
+                try:
+                    with open(qr_file_path, 'rb') as attachment:
+                        part = MIMEBase('application', 'octet-stream')
+                        part.set_payload(attachment.read())
+                    encoders.encode_base64(part)
+                    part.add_header(
+                        'Content-Disposition',
+                        f'attachment; filename={os.path.basename(qr_file_path)}',
+                    )
+                    msg.attach(part)
+                except Exception as e:
+                    print(f"Error attaching QR code {qr_file_path} for {recipient_email}: {e}")
+                    failed_send_count += 1
+                    log_email_error(recipient_email, mobile, f'Error attaching QR file: {e}')
+                    print(f"Failed attaching for {recipient_email}. Remaining candidates: {remaining_candidates}")
+                    continue # Skip to next candidate
+
+                # --- Send Email ---
+                try:
+                    server.sendmail(sender_email, recipient_email, msg.as_string())
+                    print(f"Email sent to {recipient_email}. Remaining candidates: {remaining_candidates}")
+                    record_sent_email(recipient_email, mobile)
+                    sent_count += 1
+                except Exception as e:
+                    print(f"Error sending email to {recipient_email}: {e}")
+                    failed_send_count += 1
+                    log_email_error(recipient_email, mobile, f'Sending failed: {e}')
+                    print(f"Failed sending to {recipient_email}. Remaining candidates: {remaining_candidates}")
+            
+            # --- Close SMTP Connection ---
+            if server:
+                server.quit()
+                print("SMTP server connection closed.")
+
+    # --- Final Summary ---
     print("\nEmail Sending Summary:")
     print(f" - Successfully sent: {sent_count}")
     print(f" - Skipped (already sent): {skipped_already_sent}")
     print(f" - Skipped (missing data): {skipped_missing_data}")
     print(f" - Skipped (missing QR): {skipped_missing_qr}")
-    print(f" - Failed to send/attach: {failed_send_count}")
-    print(f" - Total processed: {len(df)}")
+    print(f" - Failed to send/attach (out of {total_candidates} candidates): {failed_send_count}")
+    print(f" - Total rows in CSV: {len(df)}")
     print(f"Note: Errors/skips logged to '{EMAIL_ERROR_LOG_FILE}'")
     print("All emails have been processed.")
 
