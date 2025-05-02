@@ -213,7 +213,7 @@ def send_qr_codes(csv_path, qr_dir, sender_email, sender_password, smtp_server, 
                 row = df.loc[index] # Get the full row data for name formatting
 
                 # --- Prepare Email ---
-                subject = "Your A.I. Summit Erzurum E-Ticket"
+                subject = "AI Summit Erzurum E-Biletiniz"
                 full_name = row.get('isim', 'Participant').strip()
                 formatted_name = 'Participant'
                 if full_name and full_name != 'Participant':
